@@ -63,6 +63,13 @@ class KotlinJvmModuleBuildTarget(kotlinContext: KotlinCompileContext, jpsModuleB
     override val buildMetaInfoFileName
         get() = JVM_BUILD_META_INFO_FILE_NAME
 
+    override val targetId: TargetId
+        get() {
+            val moduleName = module.k2JvmCompilerArguments.moduleName
+            return if (moduleName != null) TargetId(moduleName, jpsModuleBuildTarget.targetType.typeId)
+            else super.targetId
+        }
+
     override fun makeServices(
         builder: Services.Builder,
         incrementalCaches: Map<KotlinModuleBuildTarget<*>, JpsIncrementalCache>,
@@ -254,12 +261,13 @@ class KotlinJvmModuleBuildTarget(kotlinContext: KotlinCompileContext, jpsModuleB
     }
 
     override fun updateCaches(
+        dirtyFilesHolder: KotlinDirtySourceFilesHolder,
         jpsIncrementalCache: JpsIncrementalCache,
         files: List<GeneratedFile>,
         changesCollector: ChangesCollector,
         environment: JpsCompilerEnvironment
     ) {
-        super.updateCaches(jpsIncrementalCache, files, changesCollector, environment)
+        super.updateCaches(dirtyFilesHolder, jpsIncrementalCache, files, changesCollector, environment)
 
         updateIncrementalCache(files, jpsIncrementalCache as IncrementalJvmCache, changesCollector, null)
     }

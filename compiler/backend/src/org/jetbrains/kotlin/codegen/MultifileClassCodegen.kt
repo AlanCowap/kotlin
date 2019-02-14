@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.codegen.context.FieldOwnerContext
 import org.jetbrains.kotlin.codegen.context.MethodContext
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.IncrementalCompilation
+import org.jetbrains.kotlin.config.JvmAnalysisFlags
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.DiagnosticUtils
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
@@ -57,10 +58,9 @@ interface MultifileClassCodegen {
 }
 
 class MultifileClassCodegenImpl(
-        private val state: GenerationState,
-        private val files: Collection<KtFile>,
-        private val facadeFqName: FqName,
-        private val packagePartRegistry: PackagePartRegistry
+    private val state: GenerationState,
+    private val files: Collection<KtFile>,
+    private val facadeFqName: FqName
 ) : MultifileClassCodegen {
     private val facadeClassType = AsmUtil.asmTypeByFqNameWithoutInnerClasses(facadeFqName)
 
@@ -80,7 +80,7 @@ class MultifileClassCodegenImpl(
                     .filterIsInstance<DeserializedCallableMemberDescriptor>()
 
     private val shouldGeneratePartHierarchy =
-            state.inheritMultifileParts
+        state.languageVersionSettings.getFlag(JvmAnalysisFlags.inheritMultifileParts)
 
     private val partInternalNamesSorted = run {
         val partInternalNamesSet = hashSetOf<String>()
@@ -213,7 +213,7 @@ class MultifileClassCodegenImpl(
             !file.hasDeclarationsForPartClass(state.bindingContext)
         ) return
 
-        packagePartRegistry.addPart(partType.internalName, facadeClassType.internalName)
+        state.factory.packagePartRegistry.addPart(packageFragment.fqName, partType.internalName, facadeClassType.internalName)
 
         val builder = state.factory.newVisitor(MultifileClassPart(file, packageFragment), partType, file)
 
@@ -246,7 +246,7 @@ class MultifileClassCodegenImpl(
         val facadeContext = state.rootContext.intoMultifileClass(packageFragment, facadeClassType, partType)
         val memberCodegen = createCodegenForDelegatesInMultifileFacade(facadeContext)
         for (declaration in CodegenUtil.getDeclarationsToGenerate(file, state.bindingContext)) {
-            if (declaration is KtNamedFunction || declaration is KtProperty || declaration is KtTypeAlias) {
+            if (shouldGenerateInFacade(declaration)) {
                 val descriptor = state.bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, declaration)
                 if (descriptor !is MemberDescriptor) {
                     throw AssertionError("Expected callable member, was " + descriptor + " for " + declaration.text)
@@ -254,6 +254,15 @@ class MultifileClassCodegenImpl(
                 addDelegateGenerationTaskIfNeeded(descriptor, { memberCodegen.genSimpleMember(declaration) })
             }
         }
+    }
+
+    private fun shouldGenerateInFacade(declaration: KtDeclaration): Boolean {
+        if (declaration is KtNamedFunction || declaration is KtProperty) return true
+
+        // In light classes, we intentionally do not analyze type aliases, since they're metadata-only
+        if (declaration is KtTypeAlias && state.classBuilderMode.generateMetadata) return true
+
+        return false
     }
 
     private fun shouldGenerateInFacade(descriptor: MemberDescriptor): Boolean {

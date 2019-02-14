@@ -14,6 +14,9 @@ import com.intellij.openapi.externalSystem.service.project.manage.AbstractProjec
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.DependencyScope
+import com.intellij.openapi.roots.ExportableOrderEntry
+import com.intellij.openapi.roots.ModifiableRootModel
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.config.CoroutineSupport
 import org.jetbrains.kotlin.config.JvmTarget
@@ -22,10 +25,8 @@ import org.jetbrains.kotlin.gradle.KotlinCompilation
 import org.jetbrains.kotlin.gradle.KotlinModule
 import org.jetbrains.kotlin.gradle.KotlinPlatform
 import org.jetbrains.kotlin.gradle.KotlinSourceSet
-import org.jetbrains.kotlin.idea.facet.applyCompilerArgumentsToFacet
-import org.jetbrains.kotlin.idea.facet.configureFacet
-import org.jetbrains.kotlin.idea.facet.getOrCreateFacet
-import org.jetbrains.kotlin.idea.facet.noVersionAutoAdvance
+import org.jetbrains.kotlin.idea.facet.*
+import org.jetbrains.kotlin.idea.framework.KotlinSdkType
 import org.jetbrains.kotlin.idea.inspections.gradle.findAll
 import org.jetbrains.kotlin.idea.inspections.gradle.findKotlinPluginVersion
 import org.jetbrains.kotlin.idea.platform.IdePlatformKindTooling
@@ -43,6 +44,7 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
         project: Project,
         modelsProvider: IdeModifiableModelsProvider
     ) {
+        var hasKotlinSourceRootTypes = false
         for (nodeToImport in toImport) {
             val mainModuleData = ExternalSystemApiUtil.findParent(
                 nodeToImport,
@@ -56,10 +58,29 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
 
             if (platform != KotlinPlatform.JVM && platform != KotlinPlatform.ANDROID) {
                 migrateNonJvmSourceFolders(rootModel)
+                hasKotlinSourceRootTypes = true
             }
 
-            configureFacet(sourceSetData, kotlinSourceSet, mainModuleData, ideModule, modelsProvider)
+            configureFacet(sourceSetData, kotlinSourceSet, mainModuleData, ideModule, modelsProvider)?.let { facet ->
+                GradleProjectImportHandler.getInstances(project).forEach { it.importBySourceSet(facet, nodeToImport) }
+            }
+
+            if (kotlinSourceSet.isTestModule) {
+                assignTestScope(rootModel)
+            }
         }
+        if (hasKotlinSourceRootTypes) {
+            KotlinSdkType.setUpIfNeeded()
+        }
+    }
+
+    private fun assignTestScope(rootModel: ModifiableRootModel) {
+        rootModel
+            .orderEntries
+            .asSequence()
+            .filterIsInstance<ExportableOrderEntry>()
+            .filter { it.scope == DependencyScope.COMPILE }
+            .forEach { it.scope = DependencyScope.TEST }
     }
 
     companion object {
@@ -76,12 +97,12 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
             mainModuleNode: DataNode<ModuleData>,
             ideModule: Module,
             modelsProvider: IdeModifiableModelsProvider
-        ) {
+        ): KotlinFacet? {
             val compilerVersion = mainModuleNode
                 .findAll(BuildScriptClasspathData.KEY)
                 .firstOrNull()
                 ?.data
-                ?.let { findKotlinPluginVersion(it) } ?: return
+                ?.let { findKotlinPluginVersion(it) }// ?: return null TODO: Fix in CLion or our plugin KT-27623
 
             val platformKind = IdePlatformKindTooling.getTooling(kotlinSourceSet.platform).kind
             val platform = when (platformKind) {
@@ -135,6 +156,8 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
                     testOutputPath = null
                 }
             }
+
+            return kotlinFacet
         }
     }
 }

@@ -102,7 +102,7 @@ abstract class KotlinDslGradleKotlinFrameworkSupportProvider(
         val isNewProject = module.project.getUserData(ExternalSystemDataKeys.NEWLY_CREATED_PROJECT) == true
         if (isNewProject) {
             ProjectCodeStyleImporter.apply(module.project, KotlinStyleGuideCodeStyle.INSTANCE)
-            GradlePropertiesFileUtils.addCodeStyleProperty(module.project, KotlinStyleGuideCodeStyle.CODE_STYLE_SETTING)
+            GradlePropertiesFileFacade.forProject(module.project).addCodeStyleProperty(KotlinStyleGuideCodeStyle.CODE_STYLE_SETTING)
         }
     }
 
@@ -121,7 +121,7 @@ class KotlinDslGradleKotlinJavaFrameworkSupportProvider :
     override fun getPluginDefinition() = "kotlin(\"jvm\")"
 
     override fun getRuntimeLibrary(rootModel: ModifiableRootModel, version: String?) =
-        "compile(${getKotlinModuleDependencySnippet(getStdlibArtifactId(rootModel.sdk, bundledRuntimeVersion()), version)})"
+        "implementation(${getKotlinModuleDependencySnippet(getStdlibArtifactId(rootModel.sdk, bundledRuntimeVersion()), version)})"
 
     override fun addSupport(
         projectId: ProjectId,
@@ -147,7 +147,7 @@ class KotlinDslGradleKotlinJSFrameworkSupportProvider :
     override fun getPluginDefinition(): String = "id(\"kotlin2js\")"
 
     override fun getRuntimeLibrary(rootModel: ModifiableRootModel, version: String?) =
-        "compile(${getKotlinModuleDependencySnippet(MAVEN_JS_STDLIB_ID.removePrefix("kotlin-"), version)})"
+        "implementation(${getKotlinModuleDependencySnippet(MAVEN_JS_STDLIB_ID.removePrefix("kotlin-"), version)})"
 
     override fun addSupport(
         projectId: ProjectId,

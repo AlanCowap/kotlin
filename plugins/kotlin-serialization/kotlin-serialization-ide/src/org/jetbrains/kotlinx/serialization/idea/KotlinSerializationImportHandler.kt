@@ -16,28 +16,31 @@
 
 package org.jetbrains.kotlinx.serialization.idea
 
-import com.intellij.util.PathUtil
+import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.idea.facet.KotlinFacet
 import java.io.File
 
 internal object KotlinSerializationImportHandler {
-    private val PLUGIN_JPS_JAR :String
-        get() = File(PathUtil.getJarPathForClass(this::class.java)).absolutePath
+    val PLUGIN_JPS_JAR: String
+        get() = File(PathUtil.kotlinPathsForIdeaPlugin.libPath, "kotlinx-serialization-compiler-plugin.jar").absolutePath
 
     fun modifyCompilerArguments(facet: KotlinFacet, buildSystemPluginJar: String) {
         val facetSettings = facet.configuration.settings
         val commonArguments = facetSettings.compilerArguments ?: CommonCompilerArguments.DummyImpl()
 
+        var pluginWasEnabled = false
         val oldPluginClasspaths = (commonArguments.pluginClasspaths ?: emptyArray()).filterTo(mutableListOf()) {
             val lastIndexOfFile = it.lastIndexOfAny(charArrayOf('/', File.separatorChar))
             if (lastIndexOfFile < 0) {
                 return@filterTo true
             }
-            !it.drop(lastIndexOfFile + 1).matches("$buildSystemPluginJar-.*\\.jar".toRegex())
+            val match = it.drop(lastIndexOfFile + 1).matches("$buildSystemPluginJar-.*\\.jar".toRegex())
+            if (match) pluginWasEnabled = true
+            !match
         }
 
-        val newPluginClasspaths = oldPluginClasspaths + PLUGIN_JPS_JAR
+        val newPluginClasspaths = if (pluginWasEnabled) oldPluginClasspaths + PLUGIN_JPS_JAR else oldPluginClasspaths
         commonArguments.pluginClasspaths = newPluginClasspaths.toTypedArray()
         facetSettings.compilerArguments = commonArguments
     }

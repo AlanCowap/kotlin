@@ -6,63 +6,69 @@
 package org.jetbrains.kotlin.ir.backend.js
 
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
-import org.jetbrains.kotlin.backend.common.lower.*
-import org.jetbrains.kotlin.backend.common.runOnFilePostfix
+import org.jetbrains.kotlin.backend.common.phaser.invokeToplevel
+import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.languageVersionSettings
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
-import org.jetbrains.kotlin.ir.backend.js.lower.*
 import org.jetbrains.kotlin.ir.backend.js.lower.coroutines.CoroutineIntrinsicLowering
-import org.jetbrains.kotlin.ir.backend.js.lower.coroutines.SuspendFunctionsLowering
-import org.jetbrains.kotlin.ir.backend.js.lower.inline.FunctionInlining
-import org.jetbrains.kotlin.ir.backend.js.lower.inline.RemoveInlineFunctionsWithReifiedTypeParametersLowering
-import org.jetbrains.kotlin.ir.backend.js.lower.inline.ReturnableBlockLowering
-import org.jetbrains.kotlin.ir.backend.js.lower.inline.replaceUnboundSymbols
 import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.IrModuleToJsTransformer
-import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.expressions.IrBlock
-import org.jetbrains.kotlin.ir.expressions.IrReturnableBlock
-import org.jetbrains.kotlin.ir.symbols.*
-import org.jetbrains.kotlin.ir.symbols.impl.*
-import org.jetbrains.kotlin.ir.util.*
-import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
-import org.jetbrains.kotlin.ir.visitors.acceptVoid
-import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
-import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
+import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.ir.util.deepCopyWithSymbols
-import org.jetbrains.kotlin.ir.util.patchDeclarationParents
 import org.jetbrains.kotlin.js.analyze.TopDownAnalyzerFacadeForJS
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi2ir.Psi2IrTranslator
+import org.jetbrains.kotlin.utils.DFS
 
-data class Result(val moduleDescriptor: ModuleDescriptor, val generatedCode: String, val moduleFragment: IrModuleFragment)
+enum class ModuleType {
+    TEST_RUNTIME,
+    SECONDARY,
+    MAIN
+}
+
+class CompiledModule(
+    val moduleName: String,
+    val generatedCode: String?,
+    val moduleFragment: IrModuleFragment?,
+    val moduleType: ModuleType,
+    val dependencies: List<CompiledModule>
+) {
+    val descriptor
+        get() = moduleFragment!!.descriptor as ModuleDescriptorImpl
+}
 
 fun compile(
     project: Project,
     files: List<KtFile>,
     configuration: CompilerConfiguration,
-    export: FqName? = null,
-    dependencies: List<ModuleDescriptor> = listOf(),
-    irDependencyModules: List<IrModuleFragment> = listOf()
-): Result {
+    export: List<FqName> = emptyList(),
+    dependencies: List<CompiledModule> = emptyList(),
+    builtInsModule: CompiledModule? = null,
+    moduleType: ModuleType
+): CompiledModule {
     val analysisResult =
-        TopDownAnalyzerFacadeForJS.analyzeFiles(files, project, configuration, dependencies.mapNotNull { it as? ModuleDescriptorImpl }, emptyList())
+        TopDownAnalyzerFacadeForJS.analyzeFiles(
+            files,
+            project,
+            configuration,
+            dependencies.map { it.descriptor },
+            emptyList(),
+            thisIsBuiltInsModule = builtInsModule == null,
+            customBuiltInsModule = builtInsModule?.descriptor
+        )
 
     ProgressIndicatorAndCompilationCanceledStatus.checkCanceled()
 
     TopDownAnalyzerFacadeForJS.checkForErrors(files, analysisResult.bindingContext)
 
-    val psi2IrTranslator = Psi2IrTranslator(configuration.languageVersionSettings)
-    val psi2IrContext = psi2IrTranslator.createGeneratorContext(analysisResult.moduleDescriptor, analysisResult.bindingContext)
+    val symbolTable = SymbolTable()
+    dependencies.forEach { symbolTable.loadModule(it.moduleFragment!!) }
 
-    irDependencyModules.forEach { psi2IrContext.symbolTable.loadModule(it)}
+    val psi2IrTranslator = Psi2IrTranslator(configuration.languageVersionSettings)
+    val psi2IrContext = psi2IrTranslator.createGeneratorContext(analysisResult.moduleDescriptor, analysisResult.bindingContext, symbolTable)
 
     val moduleFragment = psi2IrTranslator.generateModuleFragment(psi2IrContext, files)
 
@@ -71,76 +77,35 @@ fun compile(
         psi2IrContext.irBuiltIns,
         psi2IrContext.symbolTable,
         moduleFragment,
-        configuration
+        configuration,
+        dependencies,
+        moduleType
     )
 
-    ExternalDependenciesGenerator(psi2IrContext.moduleDescriptor, psi2IrContext.symbolTable, psi2IrContext.irBuiltIns)
-        .generateUnboundSymbolsAsDependencies(moduleFragment)
+    // TODO: Split compilation into two steps: kt -> ir, ir -> js
+    val moduleName = configuration[CommonConfigurationKeys.MODULE_NAME]!!
+    when (moduleType) {
+        ModuleType.MAIN -> {
+            val moduleDependencies: List<CompiledModule> =
+                DFS.topologicalOrder(dependencies, CompiledModule::dependencies)
+                    .filter { it.moduleType == ModuleType.SECONDARY }
 
-    val extensions = IrGenerationExtension.getInstances(project)
-    extensions.forEach { extension ->
-        moduleFragment.files.forEach { irFile -> extension.generate(irFile, context, psi2IrContext.bindingContext) }
+            val fileDependencies = moduleDependencies.flatMap { it.moduleFragment!!.files }
+
+            moduleFragment.files.addAll(0, fileDependencies)
+        }
+
+        ModuleType.SECONDARY -> {
+            return CompiledModule(moduleName, null, moduleFragment, moduleType, dependencies)
+        }
+
+        ModuleType.TEST_RUNTIME -> {
+        }
     }
 
-    MoveExternalDeclarationsToSeparatePlace().lower(moduleFragment.files)
+    jsPhases.invokeToplevel(context.phaseConfig, context, moduleFragment)
 
+    val jsProgram = moduleFragment.accept(IrModuleToJsTransformer(context), null)
 
-    moduleFragment.files.forEach(CoroutineIntrinsicLowering(context)::lower)
-    moduleFragment.files.forEach { ArrayInlineConstructorLowering(context).lower(it) }
-
-    val moduleFragmentCopy = moduleFragment.deepCopyWithSymbols()
-
-    context.performInlining(moduleFragment)
-
-    context.lower(moduleFragment, irDependencyModules)
-
-    val program = moduleFragment.accept(IrModuleToJsTransformer(context), null)
-
-    return Result(analysisResult.moduleDescriptor, program.toString(), moduleFragmentCopy)
+    return CompiledModule(moduleName, jsProgram.toString(), context.moduleFragmentCopy, moduleType, dependencies)
 }
-
-private fun JsIrBackendContext.performInlining(moduleFragment: IrModuleFragment) {
-    FunctionInlining(this).inline(moduleFragment)
-
-    moduleFragment.replaceUnboundSymbols(this)
-    moduleFragment.patchDeclarationParents()
-
-    moduleFragment.files.forEach { file ->
-        RemoveInlineFunctionsWithReifiedTypeParametersLowering.runOnFilePostfix(file)
-    }
-}
-
-private fun JsIrBackendContext.lower(moduleFragment: IrModuleFragment, dependencies: List<IrModuleFragment>) {
-    moduleFragment.files.forEach(VarargLowering(this)::lower)
-    moduleFragment.files.forEach(LateinitLowering(this, true)::lower)
-    moduleFragment.files.forEach(DefaultArgumentStubGenerator(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(DefaultParameterInjector(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(DefaultParameterCleaner(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(SharedVariablesLowering(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(EnumClassLowering(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(EnumUsageLowering(this)::lower)
-    moduleFragment.files.forEach(ReturnableBlockLowering(this)::lower)
-    moduleFragment.files.forEach(LocalDelegatedPropertiesLowering()::lower)
-    moduleFragment.files.forEach(LocalDeclarationsLowering(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(InnerClassesLowering(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(InnerClassConstructorCallsLowering(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(SuspendFunctionsLowering(this)::lower)
-    moduleFragment.files.forEach(PropertiesLowering()::lower)
-    moduleFragment.files.forEach(InitializersLowering(this, JsLoweredDeclarationOrigin.CLASS_STATIC_INITIALIZER, false)::runOnFilePostfix)
-    moduleFragment.files.forEach(MultipleCatchesLowering(this)::lower)
-    moduleFragment.files.forEach(BridgesConstruction(this)::runOnFilePostfix)
-    moduleFragment.files.forEach(TypeOperatorLowering(this)::lower)
-    moduleFragment.files.forEach(BlockDecomposerLowering(this)::runOnFilePostfix)
-    val sctor = SecondaryCtorLowering(this)
-    (moduleFragment.files + dependencies.flatMap { it.files }).forEach(sctor.getConstructorProcessorLowering())
-    moduleFragment.files.forEach(sctor.getConstructorRedirectorLowering())
-    val clble = CallableReferenceLowering(this)
-    moduleFragment.files.forEach(clble.getReferenceCollector())
-    moduleFragment.files.forEach(clble.getClosureBuilder())
-    moduleFragment.files.forEach(clble.getReferenceReplacer())
-    moduleFragment.files.forEach(ClassReferenceLowering(this)::lower)
-    moduleFragment.files.forEach(PrimitiveCompanionLowering(this)::lower)
-    moduleFragment.files.forEach(IntrinsicifyCallsLowering(this)::lower)
-}
-
-private fun FileLoweringPass.lower(files: List<IrFile>) = files.forEach { lower(it) }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -13,9 +13,6 @@ package kotlin.collections
 // See: https://github.com/JetBrains/kotlin/tree/master/libraries/stdlib
 //
 
-import kotlin.*
-import kotlin.text.*
-import kotlin.comparisons.*
 import kotlin.random.*
 
 /**
@@ -69,6 +66,8 @@ public operator fun <@kotlin.internal.OnlyInputTypes T> Iterable<T>.contains(ele
 
 /**
  * Returns an element at the given [index] or throws an [IndexOutOfBoundsException] if the [index] is out of bounds of this collection.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAt
  */
 public fun <T> Iterable<T>.elementAt(index: Int): T {
     if (this is List)
@@ -78,6 +77,8 @@ public fun <T> Iterable<T>.elementAt(index: Int): T {
 
 /**
  * Returns an element at the given [index] or throws an [IndexOutOfBoundsException] if the [index] is out of bounds of this list.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAt
  */
 @kotlin.internal.InlineOnly
 public inline fun <T> List<T>.elementAt(index: Int): T {
@@ -86,6 +87,8 @@ public inline fun <T> List<T>.elementAt(index: Int): T {
 
 /**
  * Returns an element at the given [index] or the result of calling the [defaultValue] function if the [index] is out of bounds of this collection.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAtOrElse
  */
 public fun <T> Iterable<T>.elementAtOrElse(index: Int, defaultValue: (Int) -> T): T {
     if (this is List)
@@ -104,6 +107,8 @@ public fun <T> Iterable<T>.elementAtOrElse(index: Int, defaultValue: (Int) -> T)
 
 /**
  * Returns an element at the given [index] or the result of calling the [defaultValue] function if the [index] is out of bounds of this list.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAtOrElse
  */
 @kotlin.internal.InlineOnly
 public inline fun <T> List<T>.elementAtOrElse(index: Int, defaultValue: (Int) -> T): T {
@@ -112,6 +117,8 @@ public inline fun <T> List<T>.elementAtOrElse(index: Int, defaultValue: (Int) ->
 
 /**
  * Returns an element at the given [index] or `null` if the [index] is out of bounds of this collection.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAtOrNull
  */
 public fun <T> Iterable<T>.elementAtOrNull(index: Int): T? {
     if (this is List)
@@ -130,6 +137,8 @@ public fun <T> Iterable<T>.elementAtOrNull(index: Int): T? {
 
 /**
  * Returns an element at the given [index] or `null` if the [index] is out of bounds of this list.
+ * 
+ * @sample samples.collections.Collections.Elements.elementAtOrNull
  */
 @kotlin.internal.InlineOnly
 public inline fun <T> List<T>.elementAtOrNull(index: Int): T? {
@@ -852,6 +861,8 @@ public fun <T> Iterable<T>.reversed(): List<T> {
 
 /**
  * Sorts elements in the list in-place according to natural sort order of the value returned by specified [selector] function.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public inline fun <T, R : Comparable<R>> MutableList<T>.sortBy(crossinline selector: (T) -> R?): Unit {
     if (size > 1) sortWith(compareBy(selector))
@@ -859,6 +870,8 @@ public inline fun <T, R : Comparable<R>> MutableList<T>.sortBy(crossinline selec
 
 /**
  * Sorts elements in the list in-place descending according to natural sort order of the value returned by specified [selector] function.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public inline fun <T, R : Comparable<R>> MutableList<T>.sortByDescending(crossinline selector: (T) -> R?): Unit {
     if (size > 1) sortWith(compareByDescending(selector))
@@ -866,6 +879,8 @@ public inline fun <T, R : Comparable<R>> MutableList<T>.sortByDescending(crossin
 
 /**
  * Sorts elements in the list in-place descending according to their natural sort order.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public fun <T : Comparable<T>> MutableList<T>.sortDescending(): Unit {
     sortWith(reverseOrder())
@@ -873,6 +888,8 @@ public fun <T : Comparable<T>> MutableList<T>.sortDescending(): Unit {
 
 /**
  * Returns a list of all elements sorted according to their natural sort order.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public fun <T : Comparable<T>> Iterable<T>.sorted(): List<T> {
     if (this is Collection) {
@@ -885,6 +902,8 @@ public fun <T : Comparable<T>> Iterable<T>.sorted(): List<T> {
 
 /**
  * Returns a list of all elements sorted according to natural sort order of the value returned by specified [selector] function.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public inline fun <T, R : Comparable<R>> Iterable<T>.sortedBy(crossinline selector: (T) -> R?): List<T> {
     return sortedWith(compareBy(selector))
@@ -892,6 +911,8 @@ public inline fun <T, R : Comparable<R>> Iterable<T>.sortedBy(crossinline select
 
 /**
  * Returns a list of all elements sorted descending according to natural sort order of the value returned by specified [selector] function.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public inline fun <T, R : Comparable<R>> Iterable<T>.sortedByDescending(crossinline selector: (T) -> R?): List<T> {
     return sortedWith(compareByDescending(selector))
@@ -899,6 +920,8 @@ public inline fun <T, R : Comparable<R>> Iterable<T>.sortedByDescending(crossinl
 
 /**
  * Returns a list of all elements sorted descending according to their natural sort order.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public fun <T : Comparable<T>> Iterable<T>.sortedDescending(): List<T> {
     return sortedWith(reverseOrder())
@@ -906,6 +929,8 @@ public fun <T : Comparable<T>> Iterable<T>.sortedDescending(): List<T> {
 
 /**
  * Returns a list of all elements sorted according to the specified [comparator].
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public fun <T> Iterable<T>.sortedWith(comparator: Comparator<in T>): List<T> {
     if (this is Collection) {
@@ -1258,7 +1283,7 @@ public inline fun <T, K, V, M : MutableMap<in K, MutableList<V>>> Iterable<T>.gr
  * Creates a [Grouping] source from a collection to be used later with one of group-and-fold operations
  * using the specified [keySelector] function to extract a key from each element.
  * 
- * @sample samples.collections.Collections.Transformations.groupingByEachCount
+ * @sample samples.collections.Grouping.groupingByEachCount
  */
 @SinceKotlin("1.1")
 public inline fun <T, K> Iterable<T>.groupingBy(crossinline keySelector: (T) -> K): Grouping<T, K> {
@@ -1613,6 +1638,8 @@ public fun <T : Comparable<T>> Iterable<T>.max(): T? {
 
 /**
  * Returns the first element yielding the largest value of the given function or `null` if there are no elements.
+ * 
+ * @sample samples.collections.Collections.Aggregates.maxBy
  */
 public inline fun <T, R : Comparable<R>> Iterable<T>.maxBy(selector: (T) -> R): T? {
     val iterator = iterator()
@@ -1698,6 +1725,8 @@ public fun <T : Comparable<T>> Iterable<T>.min(): T? {
 
 /**
  * Returns the first element yielding the smallest value of the given function or `null` if there are no elements.
+ * 
+ * @sample samples.collections.Collections.Aggregates.minBy
  */
 public inline fun <T, R : Comparable<R>> Iterable<T>.minBy(selector: (T) -> R): T? {
     val iterator = iterator()
@@ -1912,6 +1941,9 @@ public operator fun <T> Iterable<T>.minus(element: T): List<T> {
 
 /**
  * Returns a list containing all elements of the original collection except the elements contained in the given [elements] array.
+ * 
+ * The [elements] array may be converted to a [HashSet] to speed up the operation, thus the elements are required to have
+ * a correct and stable implementation of `hashCode()` that doesn't change between successive invocations.
  */
 public operator fun <T> Iterable<T>.minus(elements: Array<out T>): List<T> {
     if (elements.isEmpty()) return this.toList()
@@ -1921,6 +1953,9 @@ public operator fun <T> Iterable<T>.minus(elements: Array<out T>): List<T> {
 
 /**
  * Returns a list containing all elements of the original collection except the elements contained in the given [elements] collection.
+ * 
+ * The [elements] collection may be converted to a [HashSet] to speed up the operation, thus the elements are required to have
+ * a correct and stable implementation of `hashCode()` that doesn't change between successive invocations.
  */
 public operator fun <T> Iterable<T>.minus(elements: Iterable<T>): List<T> {
     val other = elements.convertToSetForSetOperationWith(this)
@@ -1931,6 +1966,9 @@ public operator fun <T> Iterable<T>.minus(elements: Iterable<T>): List<T> {
 
 /**
  * Returns a list containing all elements of the original collection except the elements contained in the given [elements] sequence.
+ * 
+ * The [elements] sequence may be converted to a [HashSet] to speed up the operation, thus the elements are required to have
+ * a correct and stable implementation of `hashCode()` that doesn't change between successive invocations.
  */
 public operator fun <T> Iterable<T>.minus(elements: Sequence<T>): List<T> {
     val other = elements.toHashSet()

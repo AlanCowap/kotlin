@@ -57,6 +57,16 @@ fun Project.ideaUltimatePreloadedDeps(vararg artifactBaseNames: String, subdir: 
 
 fun Project.kotlinDep(artifactBaseName: String, version: String): String = "org.jetbrains.kotlin:kotlin-$artifactBaseName:$version"
 
+val Project.useBootstrapStdlib: Boolean get() =
+    findProperty("jpsBuild")?.toString() == "true"
+
+fun Project.kotlinStdlib(suffix: String? = null): Any {
+    return if (useBootstrapStdlib)
+        kotlinDep(listOfNotNull("stdlib", suffix).joinToString("-"), bootstrapKotlinVersion)
+    else
+        dependencies.project(listOfNotNull(":kotlin-stdlib", suffix).joinToString("-"))
+}
+
 @Deprecated("Depend on the default configuration instead", ReplaceWith("project(name)"))
 fun DependencyHandler.projectDist(name: String): ProjectDependency = project(name)
 fun DependencyHandler.projectTests(name: String): ProjectDependency = project(name, configuration = "tests-jar")
@@ -64,14 +74,13 @@ fun DependencyHandler.projectRuntimeJar(name: String): ProjectDependency = proje
 fun DependencyHandler.projectArchives(name: String): ProjectDependency = project(name, configuration = "archives")
 fun DependencyHandler.projectClasses(name: String): ProjectDependency = project(name, configuration = "classes-dirs")
 
-val protobufLiteProject = ":custom-dependencies:protobuf-lite"
-val protobufRelocatedProject = ":custom-dependencies:protobuf-relocated"
-fun DependencyHandler.protobufLite(): ProjectDependency =
-        project(protobufLiteProject, configuration = "default").apply { isTransitive = false }
-val protobufLiteTask = "$protobufLiteProject:prepare"
+val Project.protobufVersion: String get() = findProperty("versions.protobuf") as String
 
-fun DependencyHandler.protobufFull(): ProjectDependency =
-        project(protobufRelocatedProject, configuration = "default").apply { isTransitive = false }
+val Project.protobufRepo: String get() =
+    "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_Protobuf),status:SUCCESS,pinned:true,tag:$protobufVersion/artifacts/content/internal/repo/"
+
+fun Project.protobufLite(): String = "org.jetbrains.kotlin:protobuf-lite:$protobufVersion"
+fun Project.protobufFull(): String = "org.jetbrains.kotlin:protobuf-relocated:$protobufVersion"
 
 fun File.matchMaybeVersionedArtifact(baseName: String) = name.matches(baseName.toMaybeVersionedJarRegex())
 
@@ -104,6 +113,9 @@ fun Project.firstFromJavaHomeThatExists(vararg paths: String, jdkHome: File = Fi
 fun Project.toolsJar(jdkHome: File = File(this.property("JDK_18") as String)): File? =
     firstFromJavaHomeThatExists("lib/tools.jar", jdkHome = jdkHome)
 
+val compilerManifestClassPath
+    get() = "annotations-13.0.jar kotlin-stdlib.jar kotlin-reflect.jar kotlin-script-runtime.jar trove4j.jar"
+
 object EmbeddedComponents {
     val CONFIGURATION_NAME = "embeddedComponents"
 }
@@ -124,3 +136,26 @@ fun AbstractCopyTask.fromEmbeddedComponents() {
         }
     }
 }
+
+// TODO: it seems incomplete, find and add missing dependencies
+val testDistProjects = listOf(
+    "", // for root project
+    ":kotlin-stdlib:jvm-minimal-for-test",
+    ":kotlin-compiler",
+    ":kotlin-script-runtime",
+    ":kotlin-stdlib",
+    ":kotlin-stdlib-jre7",
+    ":kotlin-stdlib-jre8",
+    ":kotlin-stdlib-jdk7",
+    ":kotlin-stdlib-jdk8",
+    ":kotlin-stdlib-js",
+    ":kotlin-reflect",
+    ":kotlin-test:kotlin-test-jvm",
+    ":kotlin-test:kotlin-test-junit",
+    ":kotlin-test:kotlin-test-js",
+    ":kotlin-preloader",
+    ":plugins:android-extensions-compiler",
+    ":kotlin-ant",
+    ":kotlin-annotations-jvm",
+    ":kotlin-annotations-android"
+)

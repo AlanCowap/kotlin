@@ -78,6 +78,11 @@ val ScriptCompilationConfigurationKeys.providedProperties by PropertiesCollectio
 val ScriptCompilationConfigurationKeys.defaultImports by PropertiesCollection.key<List<String>>()
 
 /**
+ * The list of script sources that should be compiled along with the script and imported into it
+ */
+val ScriptCompilationConfigurationKeys.importScripts by PropertiesCollection.key<List<SourceCode>>()
+
+/**
  * The list of script dependencies - platform specific
  */
 val ScriptCompilationConfigurationKeys.dependencies by PropertiesCollection.key<List<ScriptDependency>>()
@@ -90,12 +95,17 @@ val ScriptCompilationConfigurationKeys.compilerOptions by PropertiesCollection.k
 /**
  * The callback that will be called on the script compilation before parsing the script
  */
-val ScriptCompilationConfigurationKeys.refineConfigurationBeforeParsing by PropertiesCollection.key<RefineConfigurationBeforeParsingData>()
+val ScriptCompilationConfigurationKeys.refineConfigurationBeforeParsing by PropertiesCollection.key<RefineConfigurationUnconditionallyData>()
 
 /**
  * The callback that will be called on the script compilation after parsing script file annotations
  */
 val ScriptCompilationConfigurationKeys.refineConfigurationOnAnnotations by PropertiesCollection.key<RefineConfigurationOnAnnotationsData>()
+
+/**
+ * The callback that will be called on the script compilation immediately before starting the compilation
+ */
+val ScriptCompilationConfigurationKeys.refineConfigurationBeforeCompiling by PropertiesCollection.key<RefineConfigurationUnconditionallyData>()
 
 /**
  * The list of script fragments that should be compiled intead of the whole text
@@ -116,7 +126,7 @@ class RefineConfigurationBuilder : PropertiesCollection.Builder() {
      * @param handler the callback that will be called
      */
     fun beforeParsing(handler: RefineScriptCompilationConfigurationHandler) {
-        set(ScriptCompilationConfiguration.refineConfigurationBeforeParsing, RefineConfigurationBeforeParsingData(handler))
+        set(ScriptCompilationConfiguration.refineConfigurationBeforeParsing, RefineConfigurationUnconditionallyData(handler))
     }
 
     /**
@@ -125,6 +135,7 @@ class RefineConfigurationBuilder : PropertiesCollection.Builder() {
      * @param handler the callback that will be called
      */
     fun onAnnotations(annotations: List<KotlinType>, handler: RefineScriptCompilationConfigurationHandler) {
+        // TODO: implement handlers composition
         set(ScriptCompilationConfiguration.refineConfigurationOnAnnotations, RefineConfigurationOnAnnotationsData(annotations, handler))
     }
 
@@ -139,7 +150,7 @@ class RefineConfigurationBuilder : PropertiesCollection.Builder() {
 
     /**
      * The callback that will be called on the script compilation after parsing script file annotations
-     * @param annotations the list of annotations to trigger the callback on
+     * @param T the annotation to trigger the callback on
      * @param handler the callback that will be called
      */
     inline fun <reified T : Annotation> onAnnotations(noinline handler: RefineScriptCompilationConfigurationHandler) {
@@ -163,6 +174,14 @@ class RefineConfigurationBuilder : PropertiesCollection.Builder() {
     fun onAnnotations(annotations: Iterable<KClass<out Annotation>>, handler: RefineScriptCompilationConfigurationHandler) {
         onAnnotations(annotations.map { KotlinType(it) }, handler)
     }
+
+    /**
+     * The callback that will be called on the script compilation  immediately before starting the compilation
+     * @param handler the callback that will be called
+     */
+    fun beforeCompiling(handler: RefineScriptCompilationConfigurationHandler) {
+        set(ScriptCompilationConfiguration.refineConfigurationBeforeCompiling, RefineConfigurationUnconditionallyData(handler))
+    }
 }
 
 /**
@@ -171,7 +190,7 @@ class RefineConfigurationBuilder : PropertiesCollection.Builder() {
 typealias RefineScriptCompilationConfigurationHandler =
             (ScriptConfigurationRefinementContext) -> ResultWithDiagnostics<ScriptCompilationConfiguration>
 
-class RefineConfigurationBeforeParsingData(
+class RefineConfigurationUnconditionallyData(
     val handler: RefineScriptCompilationConfigurationHandler
 ) : Serializable
 
@@ -204,6 +223,12 @@ interface ScriptCompiler {
 interface CompiledScript<out ScriptBase : Any> {
 
     /**
+     * The location identifier for the script source, taken from SourceCode.locationId
+     */
+    val sourceLocationId: String?
+        get() = null
+
+    /**
      * The compilation configuration used for script compilation
      */
     val compilationConfiguration: ScriptCompilationConfiguration
@@ -214,4 +239,10 @@ interface CompiledScript<out ScriptBase : Any> {
      * @return result wrapper, if successful - with loaded KClass
      */
     suspend fun getClass(scriptEvaluationConfiguration: ScriptEvaluationConfiguration?): ResultWithDiagnostics<KClass<*>>
+
+    /**
+     * The scripts compiled along with this one in one module, imported or otherwise included into compilation
+     */
+    val otherScripts: List<CompiledScript<*>>
+        get() = emptyList()
 }

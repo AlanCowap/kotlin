@@ -8,14 +8,15 @@ plugins {
 }
 
 repositories {
-    maven("https://dl.bintray.com/jetbrains/markdown")
+    maven("https://jetbrains.bintray.com/markdown")
 }
 
-// Do not rename, used in JPS importer
+// Do not rename, used in pill importer
 val projectsToShadow by extra(listOf(
         ":plugins:annotation-based-compiler-plugins-ide-support",
         ":compiler:backend",
         ":compiler:backend-common",
+        ":compiler:backend.jvm",
         ":compiler:ir.backend.common",
         ":kotlin-build-common",
         ":compiler:cli-common",
@@ -29,7 +30,19 @@ val projectsToShadow by extra(listOf(
         ":eval4j",
         ":idea:formatter",
         ":compiler:psi",
+        *if (project.findProperty("fir.enabled") == "true") {
+            arrayOf(
+                ":compiler:fir:cones",
+                ":compiler:fir:resolve",
+                ":compiler:fir:tree",
+                ":compiler:fir:psi2fir",
+                ":idea:fir-view"
+            )
+        } else {
+            emptyArray()
+        },
         ":compiler:frontend",
+        ":compiler:frontend.common",
         ":compiler:frontend.java",
         ":compiler:frontend.script",
         ":idea:ide-common",
@@ -45,6 +58,7 @@ val projectsToShadow by extra(listOf(
         ":js:js.frontend",
         ":js:js.parser",
         ":js:js.serializer",
+        ":js:js.translator",
         ":kotlin-native:kotlin-native-utils",
         ":kotlin-native:kotlin-native-library-reader",
         ":compiler:light-classes",
@@ -55,16 +69,18 @@ val projectsToShadow by extra(listOf(
         ":compiler:util",
         ":core:util.runtime"))
 
-// Do not rename, used in JPS importer
+// Do not rename, used in pill importer
 val packedJars by configurations.creating
 
 val sideJars by configurations.creating
 
 dependencies {
     packedJars(protobufFull())
-    packedJars(project(":core:builtins", configuration = "builtins"))
+    packedJars(project(":core:builtins"))
     sideJars(project(":kotlin-script-runtime"))
-    sideJars(project(":kotlin-stdlib"))
+    sideJars(kotlinStdlib())
+    sideJars(kotlinStdlib("jdk7"))
+    sideJars(kotlinStdlib("jdk8"))
     sideJars(project(":kotlin-reflect"))
     sideJars(project(":kotlin-compiler-client-embeddable"))
     sideJars(commonDep("io.javaslang", "javaslang"))

@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.resolve.DescriptorFactory
 import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.isUnderlyingPropertyOfInlineClass
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedPropertyDescriptor
 import org.jetbrains.kotlin.types.TypeUtils
 import java.lang.reflect.Field
@@ -21,17 +22,14 @@ import kotlin.reflect.KMutableProperty
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.IllegalPropertyDelegateAccessException
 import kotlin.reflect.jvm.internal.JvmPropertySignature.*
-import kotlin.reflect.jvm.internal.calls.Caller
-import kotlin.reflect.jvm.internal.calls.CallerImpl
-import kotlin.reflect.jvm.internal.calls.ThrowingCaller
-import kotlin.reflect.jvm.internal.calls.createInlineClassAwareCallerIfNeeded
+import kotlin.reflect.jvm.internal.calls.*
 
 internal abstract class KPropertyImpl<out R> private constructor(
     override val container: KDeclarationContainerImpl,
     override val name: String,
     val signature: String,
     descriptorInitialValue: PropertyDescriptor?,
-    val boundReceiver: Any?
+    private val rawBoundReceiver: Any?
 ) : KCallableImpl<R>(), KProperty<R> {
     constructor(container: KDeclarationContainerImpl, name: String, signature: String, boundReceiver: Any?) : this(
         container, name, signature, null, boundReceiver
@@ -45,9 +43,12 @@ internal abstract class KPropertyImpl<out R> private constructor(
         CallableReference.NO_RECEIVER
     )
 
-    override val isBound: Boolean get() = boundReceiver != CallableReference.NO_RECEIVER
+    val boundReceiver
+        get() = rawBoundReceiver.coerceToExpectedReceiverType(descriptor)
 
-    private val _javaField = ReflectProperties.lazySoft {
+    override val isBound: Boolean get() = rawBoundReceiver != CallableReference.NO_RECEIVER
+
+    private val _javaField = ReflectProperties.lazy {
         val jvmSignature = RuntimeTypeMapper.mapPropertySignature(descriptor)
         when (jvmSignature) {
             is KotlinProperty -> {
@@ -115,7 +116,7 @@ internal abstract class KPropertyImpl<out R> private constructor(
 
     override fun equals(other: Any?): Boolean {
         val that = other.asKPropertyImpl() ?: return false
-        return container == that.container && name == that.name && signature == that.signature && boundReceiver == that.boundReceiver
+        return container == that.container && name == that.name && signature == that.signature && rawBoundReceiver == that.rawBoundReceiver
     }
 
     override fun hashCode(): Int =
@@ -151,7 +152,7 @@ internal abstract class KPropertyImpl<out R> private constructor(
             property.descriptor.getter ?: DescriptorFactory.createDefaultGetter(property.descriptor, Annotations.EMPTY)
         }
 
-        override val caller: Caller<*> by ReflectProperties.lazySoft {
+        override val caller: Caller<*> by ReflectProperties.lazy {
             computeCallerForAccessor(isGetter = true)
         }
     }
@@ -164,7 +165,7 @@ internal abstract class KPropertyImpl<out R> private constructor(
             property.descriptor.setter ?: DescriptorFactory.createDefaultSetter(property.descriptor, Annotations.EMPTY, Annotations.EMPTY)
         }
 
-        override val caller: Caller<*> by ReflectProperties.lazySoft {
+        override val caller: Caller<*> by ReflectProperties.lazy {
             computeCallerForAccessor(isGetter = false)
         }
     }
@@ -174,6 +175,8 @@ internal abstract class KPropertyImpl<out R> private constructor(
     }
 }
 
+internal val KPropertyImpl.Accessor<*, *>.boundReceiver
+    get() = property.boundReceiver
 
 private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Boolean): Caller<*> {
     if (KDeclarationContainerImpl.LOCAL_PROPERTY_SIGNATURE.matches(property.signature)) {
@@ -189,10 +192,10 @@ private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Bool
     fun computeFieldCaller(field: Field): CallerImpl<Field> = when {
         property.descriptor.isJvmFieldPropertyInCompanionObject() || !Modifier.isStatic(field.modifiers) ->
             if (isGetter)
-                if (isBound) CallerImpl.FieldGetter.BoundInstance(field, property.boundReceiver)
+                if (isBound) CallerImpl.FieldGetter.BoundInstance(field, boundReceiver)
                 else CallerImpl.FieldGetter.Instance(field)
             else
-                if (isBound) CallerImpl.FieldSetter.BoundInstance(field, isNotNullProperty(), property.boundReceiver)
+                if (isBound) CallerImpl.FieldSetter.BoundInstance(field, isNotNullProperty(), boundReceiver)
                 else CallerImpl.FieldSetter.Instance(field, isNotNullProperty())
         isJvmStaticProperty() ->
             if (isGetter)
@@ -219,23 +222,33 @@ private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Bool
             val accessor = accessorSignature?.let { signature ->
                 property.container.findMethodBySignature(
                     jvmSignature.nameResolver.getString(signature.name),
-                    jvmSignature.nameResolver.getString(signature.desc),
-                    descriptor.isPublicInBytecode
+                    jvmSignature.nameResolver.getString(signature.desc)
                 )
             }
 
             when {
-                accessor == null -> computeFieldCaller(
-                    property.javaField ?: throw KotlinReflectionInternalError("No accessors or field is found for property $property")
-                )
+                accessor == null -> {
+                    if (property.descriptor.isUnderlyingPropertyOfInlineClass() &&
+                        property.descriptor.visibility == Visibilities.INTERNAL
+                    ) {
+                        val unboxMethod = property.descriptor.containingDeclaration.toInlineClass()?.getUnboxMethod(property.descriptor)
+                            ?: throw KotlinReflectionInternalError("Underlying property of inline class $property should have a field")
+                        if (isBound) InternalUnderlyingValOfInlineClass.Bound(unboxMethod, boundReceiver)
+                        else InternalUnderlyingValOfInlineClass.Unbound(unboxMethod)
+                    } else {
+                        val javaField = property.javaField
+                            ?: throw KotlinReflectionInternalError("No accessors or field is found for property $property")
+                        computeFieldCaller(javaField)
+                    }
+                }
                 !Modifier.isStatic(accessor.modifiers) ->
-                    if (isBound) CallerImpl.Method.BoundInstance(accessor, property.boundReceiver)
+                    if (isBound) CallerImpl.Method.BoundInstance(accessor, boundReceiver)
                     else CallerImpl.Method.Instance(accessor)
                 isJvmStaticProperty() ->
                     if (isBound) CallerImpl.Method.BoundJvmStaticInObject(accessor)
                     else CallerImpl.Method.JvmStaticInObject(accessor)
                 else ->
-                    if (isBound) CallerImpl.Method.BoundStatic(accessor, property.boundReceiver)
+                    if (isBound) CallerImpl.Method.BoundStatic(accessor, boundReceiver)
                     else CallerImpl.Method.Static(accessor)
             }
         }
@@ -248,20 +261,19 @@ private fun KPropertyImpl.Accessor<*, *>.computeCallerForAccessor(isGetter: Bool
                 else jvmSignature.setterMethod ?: throw KotlinReflectionInternalError(
                     "No source found for setter of Java method property: ${jvmSignature.getterMethod}"
                 )
-            if (isBound) CallerImpl.Method.BoundInstance(method, property.boundReceiver)
+            if (isBound) CallerImpl.Method.BoundInstance(method, boundReceiver)
             else CallerImpl.Method.Instance(method)
         }
         is MappedKotlinProperty -> {
             val signature =
                 if (isGetter) jvmSignature.getterSignature
                 else (jvmSignature.setterSignature ?: throw KotlinReflectionInternalError("No setter found for property $property"))
-            val accessor = property.container.findMethodBySignature(
-                signature.methodName, signature.methodDesc, descriptor.isPublicInBytecode
-            ) ?: throw KotlinReflectionInternalError("No accessor found for property $property")
-
+            val accessor =
+                property.container.findMethodBySignature(signature.methodName, signature.methodDesc)
+                    ?: throw KotlinReflectionInternalError("No accessor found for property $property")
             assert(!Modifier.isStatic(accessor.modifiers)) { "Mapped property cannot have a static accessor: $property" }
 
-            return if (isBound) CallerImpl.Method.BoundInstance(accessor, property.boundReceiver)
+            return if (isBound) CallerImpl.Method.BoundInstance(accessor, boundReceiver)
             else CallerImpl.Method.Instance(accessor)
         }
     }.createInlineClassAwareCallerIfNeeded(descriptor)

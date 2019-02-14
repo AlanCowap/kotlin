@@ -37,7 +37,8 @@ class ProjectInfo(
     project: Project,
     internal val projectPath: String,
     internal val exhaustiveModuleList: Boolean,
-    internal val exhaustiveSourceSourceRootList: Boolean
+    internal val exhaustiveSourceSourceRootList: Boolean,
+    internal val exhaustiveDependencyList: Boolean
 ) {
     internal val messageCollector = MessageCollector()
     private val moduleManager = ModuleManager.getInstance(project)
@@ -202,16 +203,18 @@ class ModuleInfo(
     fun run(body: ModuleInfo.() -> Unit = {}) {
         body()
 
-        val actualDependencyNames = rootModel
-            .orderEntries
-            .filter { it is ModuleOrderEntry || it is LibraryOrderEntry }
-            .map { it.presentableName }
-            .sorted()
-        val expectedDependencyNames = expectedDependencyNames.sorted()
-        if (actualDependencyNames != expectedDependencyNames) {
-            projectInfo.messageCollector.report(
-                "Module '${module.name}': Expected dependency list $expectedDependencyNames doesn't match the actual one: $actualDependencyNames"
-            )
+        if (projectInfo.exhaustiveDependencyList) {
+            val actualDependencyNames = rootModel
+                .orderEntries
+                .filter { it is ModuleOrderEntry || it is LibraryOrderEntry }
+                .map { it.presentableName }
+                .sorted()
+            val expectedDependencyNames = expectedDependencyNames.sorted()
+            if (actualDependencyNames != expectedDependencyNames) {
+                projectInfo.messageCollector.report(
+                    "Module '${module.name}': Expected dependency list $expectedDependencyNames doesn't match the actual one: $actualDependencyNames"
+                )
+            }
         }
 
         if (projectInfo.exhaustiveSourceSourceRootList) {
@@ -222,6 +225,10 @@ class ModuleInfo(
                     "Module '${module.name}': Expected source root list $expectedSourceRoots doesn't match the actual one: $actualSourceRoots"
                 )
             }
+        }
+
+        if (rootModel.sdk == null) {
+            projectInfo.messageCollector.report("Module '${module.name}': No SDK defined")
         }
     }
 
@@ -240,7 +247,14 @@ fun checkProjectStructure(
     projectPath: String,
     exhaustiveModuleList: Boolean,
     exhaustiveSourceSourceRootList: Boolean,
+    exhaustiveDependencyList: Boolean,
     body: ProjectInfo.() -> Unit = {}
 ) {
-    ProjectInfo(project, projectPath, exhaustiveModuleList, exhaustiveSourceSourceRootList).run(body)
+    ProjectInfo(
+        project,
+        projectPath,
+        exhaustiveModuleList,
+        exhaustiveSourceSourceRootList,
+        exhaustiveDependencyList
+    ).run(body)
 }

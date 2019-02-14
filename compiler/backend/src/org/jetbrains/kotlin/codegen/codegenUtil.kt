@@ -33,17 +33,13 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.BindingTrace
-import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isSubclass
 import org.jetbrains.kotlin.resolve.annotations.hasJvmStaticAnnotation
 import org.jetbrains.kotlin.resolve.calls.callUtil.getFirstArgumentExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
-import org.jetbrains.kotlin.resolve.isInlineClassType
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
@@ -257,6 +253,9 @@ fun CallableDescriptor.isJvmStaticInObjectOrClassOrInterface(): Boolean =
 fun CallableDescriptor.isJvmStaticInCompanionObject(): Boolean =
     isJvmStaticIn { DescriptorUtils.isCompanionObject(it) }
 
+fun CallableDescriptor.isJvmStaticInInlineClass(): Boolean =
+    isJvmStaticIn { it.isInlineClass() }
+
 private fun CallableDescriptor.isJvmStaticIn(predicate: (DeclarationDescriptor) -> Boolean): Boolean =
     when (this) {
         is PropertyAccessorDescriptor -> {
@@ -324,30 +323,27 @@ fun FqName.topLevelClassInternalName() = JvmClassName.byClassId(ClassId(parent()
 fun FqName.topLevelClassAsmType(): Type = Type.getObjectType(topLevelClassInternalName())
 
 fun initializeVariablesForDestructuredLambdaParameters(codegen: ExpressionCodegen, valueParameters: List<ValueParameterDescriptor>) {
-    val savedIsShouldMarkLineNumbers = codegen.isShouldMarkLineNumbers
     // Do not write line numbers until destructuring happens
     // (otherwise destructuring variables will be uninitialized in the beginning of lambda)
-    codegen.isShouldMarkLineNumbers = false
+    codegen.runWithShouldMarkLineNumbers(false) {
+        for (parameterDescriptor in valueParameters) {
+            if (parameterDescriptor !is ValueParameterDescriptorImpl.WithDestructuringDeclaration) continue
 
-    for (parameterDescriptor in valueParameters) {
-        if (parameterDescriptor !is ValueParameterDescriptorImpl.WithDestructuringDeclaration) continue
+            for (entry in parameterDescriptor.destructuringVariables.filterOutDescriptorsWithSpecialNames()) {
+                codegen.myFrameMap.enter(entry, codegen.typeMapper.mapType(entry.type))
+            }
 
-        for (entry in parameterDescriptor.destructuringVariables.filterOutDescriptorsWithSpecialNames()) {
-            codegen.myFrameMap.enter(entry, codegen.typeMapper.mapType(entry.type))
+            val destructuringDeclaration =
+                (DescriptorToSourceUtils.descriptorToDeclaration(parameterDescriptor) as? KtParameter)?.destructuringDeclaration
+                    ?: error("Destructuring declaration for descriptor $parameterDescriptor not found")
+
+            codegen.initializeDestructuringDeclarationVariables(
+                destructuringDeclaration,
+                TransientReceiver(parameterDescriptor.type),
+                codegen.findLocalOrCapturedValue(parameterDescriptor) ?: error("Local var not found for parameter $parameterDescriptor")
+            )
         }
-
-        val destructuringDeclaration =
-            (DescriptorToSourceUtils.descriptorToDeclaration(parameterDescriptor) as? KtParameter)?.destructuringDeclaration
-                ?: error("Destructuring declaration for descriptor $parameterDescriptor not found")
-
-        codegen.initializeDestructuringDeclarationVariables(
-            destructuringDeclaration,
-            TransientReceiver(parameterDescriptor.type),
-            codegen.findLocalOrCapturedValue(parameterDescriptor) ?: error("Local var not found for parameter $parameterDescriptor")
-        )
     }
-
-    codegen.isShouldMarkLineNumbers = savedIsShouldMarkLineNumbers
 }
 
 fun <D : CallableDescriptor> D.unwrapFrontendVersion() = unwrapInitialDescriptorForSuspendFunction()

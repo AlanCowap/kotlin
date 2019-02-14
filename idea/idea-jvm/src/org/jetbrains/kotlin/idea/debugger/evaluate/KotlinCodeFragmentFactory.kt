@@ -51,6 +51,7 @@ import org.jetbrains.kotlin.idea.refactoring.j2kText
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
 import org.jetbrains.kotlin.idea.util.application.progressIndicatorNullable
+import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.versions.getKotlinJvmRuntimeMarkerClass
 import org.jetbrains.kotlin.j2k.AfterConversionPass
 import org.jetbrains.kotlin.psi.*
@@ -144,7 +145,7 @@ class KotlinCodeFragmentFactory : CodeFragmentFactory() {
 
                 val fakeFile = createFakeFileWithJavaContextElement(fakeFunctionText, contextElement)
                 val fakeFunction = fakeFile.declarations.firstOrNull() as? KtFunction
-                val fakeContext = (fakeFunction?.bodyExpression as? KtBlockExpression)?.statements?.lastOrNull()
+                val fakeContext = fakeFunction?.bodyBlockExpression?.statements?.lastOrNull()
 
                 return@putCopyableUserData wrapContextIfNeeded(project, contextElement, fakeContext) ?: emptyFile
             })
@@ -269,9 +270,9 @@ class KotlinCodeFragmentFactory : CodeFragmentFactory() {
         return kotlinCodeFragment
     }
 
-    override fun isContextAccepted(contextElement: PsiElement?): Boolean {
-        return when {
-        // PsiCodeBlock -> DummyHolder -> originalElement
+    override fun isContextAccepted(contextElement: PsiElement?): Boolean = runReadAction {
+        when {
+            // PsiCodeBlock -> DummyHolder -> originalElement
             contextElement is PsiCodeBlock -> isContextAccepted(contextElement.context?.context)
             contextElement == null -> false
             contextElement.language == KotlinFileType.INSTANCE.language -> true

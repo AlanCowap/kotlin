@@ -27,6 +27,8 @@ interface KotlinSourceSet : KotlinModule {
     companion object {
         const val COMMON_MAIN_SOURCE_SET_NAME = "commonMain"
         const val COMMON_TEST_SOURCE_SET_NAME = "commonTest"
+
+        fun commonName(forTests: Boolean) = if (forTests) COMMON_TEST_SOURCE_SET_NAME else COMMON_MAIN_SOURCE_SET_NAME
     }
 }
 
@@ -35,6 +37,9 @@ interface KotlinLanguageSettings : Serializable {
     val apiVersion: String?
     val isProgressiveMode: Boolean
     val enabledLanguageFeatures: Set<String>
+    val experimentalAnnotationsInUse: Set<String>
+    val compilerPluginArguments: List<String>
+    val compilerPluginClasspath: Set<File>
 }
 
 interface KotlinCompilationOutput : Serializable {
@@ -79,6 +84,7 @@ interface KotlinTargetJar : Serializable {
 
 interface KotlinTarget : Serializable {
     val name: String
+    val presetName: String?
     val disambiguationClassifier: String?
     val platform: KotlinPlatform
     val compilations: Collection<KotlinCompilation>
@@ -97,4 +103,9 @@ interface KotlinMPPGradleModel : Serializable {
     val sourceSets: Map<String, KotlinSourceSet>
     val targets: Collection<KotlinTarget>
     val extraFeatures: ExtraFeatures
+    val kotlinNativeHome: String
+
+    companion object {
+        const val NO_KOTLIN_NATIVE_HOME = ""
+    }
 }

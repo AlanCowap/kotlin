@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -44,6 +44,79 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("test.kt")
         public void testTest() throws Exception {
             runTest("idea/testData/inspectionsLocal/arrayInDataClass/test.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/booleanLiteralArgument")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class BooleanLiteralArgument extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInBooleanLiteralArgument() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/booleanLiteralArgument"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("boolean.kt")
+        public void testBoolean() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/boolean.kt");
+        }
+
+        @TestMetadata("booleanLiteral.kt")
+        public void testBooleanLiteral() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/booleanLiteral.kt");
+        }
+
+        @TestMetadata("booleanLiteralFixAll.kt")
+        public void testBooleanLiteralFixAll() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/booleanLiteralFixAll.kt");
+        }
+
+        @TestMetadata("booleanLiteralFixPart.kt")
+        public void testBooleanLiteralFixPart() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/booleanLiteralFixPart.kt");
+        }
+
+        @TestMetadata("booleanLiteralMiddle.kt")
+        public void testBooleanLiteralMiddle() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/booleanLiteralMiddle.kt");
+        }
+
+        @TestMetadata("booleanLiteralNoPrevious.kt")
+        public void testBooleanLiteralNoPrevious() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/booleanLiteralNoPrevious.kt");
+        }
+
+        @TestMetadata("hasError.kt")
+        public void testHasError() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/hasError.kt");
+        }
+
+        @TestMetadata("hasName.kt")
+        public void testHasName() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/hasName.kt");
+        }
+
+        @TestMetadata("hasVararg.kt")
+        public void testHasVararg() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/hasVararg.kt");
+        }
+
+        @TestMetadata("intLiteral.kt")
+        public void testIntLiteral() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/intLiteral.kt");
+        }
+
+        @TestMetadata("javaMethod.kt")
+        public void testJavaMethod() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/javaMethod.kt");
+        }
+
+        @TestMetadata("vararg.kt")
+        public void testVararg() throws Exception {
+            runTest("idea/testData/inspectionsLocal/booleanLiteralArgument/vararg.kt");
         }
     }
 
@@ -564,6 +637,36 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/comment2.kt");
             }
 
+            @TestMetadata("endsWithGroupingBy.kt")
+            public void testEndsWithGroupingBy() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/endsWithGroupingBy.kt");
+            }
+
+            @TestMetadata("flatten.kt")
+            public void testFlatten() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/flatten.kt");
+            }
+
+            @TestMetadata("flatten2.kt")
+            public void testFlatten2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/flatten2.kt");
+            }
+
+            @TestMetadata("implicitReceiver.kt")
+            public void testImplicitReceiver() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/implicitReceiver.kt");
+            }
+
+            @TestMetadata("iterable.kt")
+            public void testIterable() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/iterable.kt");
+            }
+
+            @TestMetadata("iterable2.kt")
+            public void testIterable2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/iterable2.kt");
+            }
+
             @TestMetadata("mutableList.kt")
             public void testMutableList() throws Exception {
                 runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/mutableList.kt");
@@ -642,6 +745,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             @TestMetadata("simple4.kt")
             public void testSimple4() throws Exception {
                 runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/simple4.kt");
+            }
+
+            @TestMetadata("startsWithGroupingBy.kt")
+            public void testStartsWithGroupingBy() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/startsWithGroupingBy.kt");
             }
 
             @TestMetadata("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/termination")
@@ -975,6 +1083,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 public void testToSortedSet() throws Exception {
                     runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/termination/toSortedSet.kt");
                 }
+
+                @TestMetadata("unzip.kt")
+                public void testUnzip() throws Exception {
+                    runTest("idea/testData/inspectionsLocal/collections/convertCallChainIntoSequence/termination/unzip.kt");
+                }
             }
         }
 
@@ -1294,6 +1407,21 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/collections/uselessCallOnCollection/MapNotNullWithLambda.kt");
             }
 
+            @TestMetadata("MapNotNullWithLambda2.kt")
+            public void testMapNotNullWithLambda2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/uselessCallOnCollection/MapNotNullWithLambda2.kt");
+            }
+
+            @TestMetadata("MapNotNullWithLambda3.kt")
+            public void testMapNotNullWithLambda3() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/uselessCallOnCollection/MapNotNullWithLambda3.kt");
+            }
+
+            @TestMetadata("MapNotNullWithLambda4.kt")
+            public void testMapNotNullWithLambda4() throws Exception {
+                runTest("idea/testData/inspectionsLocal/collections/uselessCallOnCollection/MapNotNullWithLambda4.kt");
+            }
+
             @TestMetadata("MapNotNullWithLambdaFake.kt")
             public void testMapNotNullWithLambdaFake() throws Exception {
                 runTest("idea/testData/inspectionsLocal/collections/uselessCallOnCollection/MapNotNullWithLambdaFake.kt");
@@ -1401,6 +1529,56 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/constantConditionIf/endWithElseIfNoBraces.kt");
         }
 
+        @TestMetadata("enumEntryEq.kt")
+        public void testEnumEntryEq() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryEq.kt");
+        }
+
+        @TestMetadata("enumEntryEq2.kt")
+        public void testEnumEntryEq2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryEq2.kt");
+        }
+
+        @TestMetadata("enumEntryEq3.kt")
+        public void testEnumEntryEq3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryEq3.kt");
+        }
+
+        @TestMetadata("enumEntryGt.kt")
+        public void testEnumEntryGt() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryGt.kt");
+        }
+
+        @TestMetadata("enumEntryGtEq.kt")
+        public void testEnumEntryGtEq() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryGtEq.kt");
+        }
+
+        @TestMetadata("enumEntryGtEq2.kt")
+        public void testEnumEntryGtEq2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryGtEq2.kt");
+        }
+
+        @TestMetadata("enumEntryLt.kt")
+        public void testEnumEntryLt() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryLt.kt");
+        }
+
+        @TestMetadata("enumEntryLtEq.kt")
+        public void testEnumEntryLtEq() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryLtEq.kt");
+        }
+
+        @TestMetadata("enumEntryLtEq2.kt")
+        public void testEnumEntryLtEq2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryLtEq2.kt");
+        }
+
+        @TestMetadata("enumEntryNotEq.kt")
+        public void testEnumEntryNotEq() throws Exception {
+            runTest("idea/testData/inspectionsLocal/constantConditionIf/enumEntryNotEq.kt");
+        }
+
         @TestMetadata("expression.kt")
         public void testExpression() throws Exception {
             runTest("idea/testData/inspectionsLocal/constantConditionIf/expression.kt");
@@ -1471,9 +1649,19 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
             }
 
+            @TestMetadata("compareToFromJava.kt")
+            public void testCompareToFromJava() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/compareToFromJava.kt");
+            }
+
             @TestMetadata("divSanityTest.kt")
             public void testDivSanityTest() throws Exception {
                 runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/divSanityTest.kt");
+            }
+
+            @TestMetadata("dynamicEquals.kt")
+            public void testDynamicEquals() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/dynamicEquals.kt");
             }
 
             @TestMetadata("equals.kt")
@@ -1486,9 +1674,49 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsCompareTo.kt");
             }
 
+            @TestMetadata("equalsDoubleSmartCast.kt")
+            public void testEqualsDoubleSmartCast() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsDoubleSmartCast.kt");
+            }
+
+            @TestMetadata("equalsDoubleSmartCast2.kt")
+            public void testEqualsDoubleSmartCast2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsDoubleSmartCast2.kt");
+            }
+
+            @TestMetadata("equalsDoubleSmartCast3.kt")
+            public void testEqualsDoubleSmartCast3() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsDoubleSmartCast3.kt");
+            }
+
+            @TestMetadata("equalsDoubleSmartCastFromGeneric.kt")
+            public void testEqualsDoubleSmartCastFromGeneric() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsDoubleSmartCastFromGeneric.kt");
+            }
+
             @TestMetadata("equalsExtensionFunction.kt")
             public void testEqualsExtensionFunction() throws Exception {
                 runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsExtensionFunction.kt");
+            }
+
+            @TestMetadata("equalsFloatSmartCast.kt")
+            public void testEqualsFloatSmartCast() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsFloatSmartCast.kt");
+            }
+
+            @TestMetadata("equalsFloatingPointLiteral1.kt")
+            public void testEqualsFloatingPointLiteral1() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsFloatingPointLiteral1.kt");
+            }
+
+            @TestMetadata("equalsFloatingPointLiteral2.kt")
+            public void testEqualsFloatingPointLiteral2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsFloatingPointLiteral2.kt");
+            }
+
+            @TestMetadata("equalsFloatingPointType.kt")
+            public void testEqualsFloatingPointType() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/equalsFloatingPointType.kt");
             }
 
             @TestMetadata("extensionFunction.kt")
@@ -1544,6 +1772,21 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             @TestMetadata("notEqualsBracketsComplex.kt")
             public void testNotEqualsBracketsComplex() throws Exception {
                 runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/notEqualsBracketsComplex.kt");
+            }
+
+            @TestMetadata("notOperatorCompareTo.kt")
+            public void testNotOperatorCompareTo() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/notOperatorCompareTo.kt");
+            }
+
+            @TestMetadata("notOperatorPlus.kt")
+            public void testNotOperatorPlus() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/notOperatorPlus.kt");
+            }
+
+            @TestMetadata("plusFromJava.kt")
+            public void testPlusFromJava() throws Exception {
+                runTest("idea/testData/inspectionsLocal/conventionNameCalls/replaceCallWithBinaryOperator/plusFromJava.kt");
             }
 
             @TestMetadata("plusSanityTest.kt")
@@ -1905,6 +2148,107 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/coroutines"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
         }
 
+        @TestMetadata("idea/testData/inspectionsLocal/coroutines/deferredIsResult")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class DeferredIsResult extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            @TestMetadata("abstract.kt")
+            public void testAbstract() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/deferredIsResult/abstract.kt");
+            }
+
+            public void testAllFilesPresentInDeferredIsResult() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/coroutines/deferredIsResult"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("complex.kt")
+            public void testComplex() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/deferredIsResult/complex.kt");
+            }
+
+            @TestMetadata("lambda.kt")
+            public void testLambda() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/deferredIsResult/lambda.kt");
+            }
+
+            @TestMetadata("rename.kt")
+            public void testRename() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/deferredIsResult/rename.kt");
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/deferredIsResult/simple.kt");
+            }
+        }
+
+        @TestMetadata("idea/testData/inspectionsLocal/coroutines/directUseOfResultType")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class DirectUseOfResultType extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            @TestMetadata("abstract.kt")
+            public void testAbstract() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/abstract.kt");
+            }
+
+            public void testAllFilesPresentInDirectUseOfResultType() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/coroutines/directUseOfResultType"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("anonymous.kt")
+            public void testAnonymous() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/anonymous.kt");
+            }
+
+            @TestMetadata("complexBlock.kt")
+            public void testComplexBlock() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/complexBlock.kt");
+            }
+
+            @TestMetadata("lambdaSimple.kt")
+            public void testLambdaSimple() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/lambdaSimple.kt");
+            }
+
+            @TestMetadata("lambdaWithPartialReturn.kt")
+            public void testLambdaWithPartialReturn() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/lambdaWithPartialReturn.kt");
+            }
+
+            @TestMetadata("lambdaWithReturn.kt")
+            public void testLambdaWithReturn() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/lambdaWithReturn.kt");
+            }
+
+            @TestMetadata("needParentheses.kt")
+            public void testNeedParentheses() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/needParentheses.kt");
+            }
+
+            @TestMetadata("rename.kt")
+            public void testRename() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/rename.kt");
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/simple.kt");
+            }
+
+            @TestMetadata("simpleBlock.kt")
+            public void testSimpleBlock() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/directUseOfResultType/simpleBlock.kt");
+            }
+        }
+
         @TestMetadata("idea/testData/inspectionsLocal/coroutines/redundantAsync")
         @TestDataPath("$PROJECT_ROOT")
         @RunWith(JUnit3RunnerWithInners.class)
@@ -1922,6 +2266,36 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/experimental.kt");
             }
 
+            @TestMetadata("explicitScope.kt")
+            public void testExplicitScope() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/explicitScope.kt");
+            }
+
+            @TestMetadata("explicitScopeNamed.kt")
+            public void testExplicitScopeNamed() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/explicitScopeNamed.kt");
+            }
+
+            @TestMetadata("explicitScopeNoContext.kt")
+            public void testExplicitScopeNoContext() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/explicitScopeNoContext.kt");
+            }
+
+            @TestMetadata("globalScope.kt")
+            public void testGlobalScope() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/globalScope.kt");
+            }
+
+            @TestMetadata("globalScopeNoContext.kt")
+            public void testGlobalScopeNoContext() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/globalScopeNoContext.kt");
+            }
+
+            @TestMetadata("globalScopeNoContextNoPackage.kt")
+            public void testGlobalScopeNoContextNoPackage() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/globalScopeNoContextNoPackage.kt");
+            }
+
             @TestMetadata("simple.kt")
             public void testSimple() throws Exception {
                 runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/simple.kt");
@@ -1930,11 +2304,6 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             @TestMetadata("simplest.kt")
             public void testSimplest() throws Exception {
                 runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/simplest.kt");
-            }
-
-            @TestMetadata("withParent.kt")
-            public void testWithParent() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/redundantAsync/withParent.kt");
             }
 
             @TestMetadata("withStartAndContext.kt")
@@ -1966,67 +2335,145 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             }
         }
 
-        @TestMetadata("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure")
+        @TestMetadata("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope")
         @TestDataPath("$PROJECT_ROOT")
         @RunWith(JUnit3RunnerWithInners.class)
-        public static class ResultIsSuccessOrFailure extends AbstractLocalInspectionTest {
+        public static class SuspendFunctionOnCoroutineScope extends AbstractLocalInspectionTest {
             private void runTest(String testDataFilePath) throws Exception {
                 KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
             }
 
-            @TestMetadata("abstract.kt")
-            public void testAbstract() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/abstract.kt");
-            }
-
-            public void testAllFilesPresentInResultIsSuccessOrFailure() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            public void testAllFilesPresentInSuspendFunctionOnCoroutineScope() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
             }
 
             @TestMetadata("anonymous.kt")
             public void testAnonymous() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/anonymous.kt");
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/anonymous.kt");
             }
 
-            @TestMetadata("complexBlock.kt")
-            public void testComplexBlock() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/complexBlock.kt");
+            @TestMetadata("body.kt")
+            public void testBody() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/body.kt");
             }
 
-            @TestMetadata("lambdaSimple.kt")
-            public void testLambdaSimple() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/lambdaSimple.kt");
+            @TestMetadata("call.kt")
+            public void testCall() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/call.kt");
             }
 
-            @TestMetadata("lambdaWithPartialReturn.kt")
-            public void testLambdaWithPartialReturn() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/lambdaWithPartialReturn.kt");
+            @TestMetadata("context.kt")
+            public void testContext() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/context.kt");
             }
 
-            @TestMetadata("lambdaWithReturn.kt")
-            public void testLambdaWithReturn() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/lambdaWithReturn.kt");
+            @TestMetadata("contextWithLabeledThis.kt")
+            public void testContextWithLabeledThis() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/contextWithLabeledThis.kt");
             }
 
-            @TestMetadata("needParentheses.kt")
-            public void testNeedParentheses() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/needParentheses.kt");
+            @TestMetadata("contextWithThis.kt")
+            public void testContextWithThis() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/contextWithThis.kt");
             }
 
-            @TestMetadata("rename.kt")
-            public void testRename() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/rename.kt");
+            @TestMetadata("convertReceiver.kt")
+            public void testConvertReceiver() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/convertReceiver.kt");
+            }
+
+            @TestMetadata("declaration.kt")
+            public void testDeclaration() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/declaration.kt");
+            }
+
+            @TestMetadata("inner.kt")
+            public void testInner() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/inner.kt");
+            }
+
+            @TestMetadata("lots.kt")
+            public void testLots() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/lots.kt");
+            }
+
+            @TestMetadata("member.kt")
+            public void testMember() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/member.kt");
+            }
+
+            @TestMetadata("object.kt")
+            public void testObject() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/object.kt");
             }
 
             @TestMetadata("simple.kt")
             public void testSimple() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/simple.kt");
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/simple.kt");
             }
 
-            @TestMetadata("simpleBlock.kt")
-            public void testSimpleBlock() throws Exception {
-                runTest("idea/testData/inspectionsLocal/coroutines/resultIsSuccessOrFailure/simpleBlock.kt");
+            @TestMetadata("this.kt")
+            public void testThis() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/this.kt");
             }
+
+            @TestMetadata("thisInMember.kt")
+            public void testThisInMember() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/thisInMember.kt");
+            }
+
+            @TestMetadata("thisLabeled.kt")
+            public void testThisLabeled() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/thisLabeled.kt");
+            }
+
+            @TestMetadata("thisWrongLabeled.kt")
+            public void testThisWrongLabeled() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/thisWrongLabeled.kt");
+            }
+
+            @TestMetadata("useSite.kt")
+            public void testUseSite() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/useSite.kt");
+            }
+
+            @TestMetadata("withVariable.kt")
+            public void testWithVariable() throws Exception {
+                runTest("idea/testData/inspectionsLocal/coroutines/suspendFunctionOnCoroutineScope/withVariable.kt");
+            }
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/delegationToVarProperty")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class DelegationToVarProperty extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInDelegationToVarProperty() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/delegationToVarProperty"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("parameter.kt")
+        public void testParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/delegationToVarProperty/parameter.kt");
+        }
+
+        @TestMetadata("valParameter.kt")
+        public void testValParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/delegationToVarProperty/valParameter.kt");
+        }
+
+        @TestMetadata("varParameter.kt")
+        public void testVarParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/delegationToVarProperty/varParameter.kt");
+        }
+
+        @TestMetadata("varParameter2.kt")
+        public void testVarParameter2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/delegationToVarProperty/varParameter2.kt");
         }
     }
 
@@ -2366,6 +2813,201 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         public void testNormal() throws Exception {
             runTest("idea/testData/inspectionsLocal/forEachParameterNotUsed/normal.kt");
         }
+
+        @TestMetadata("repeat.kt")
+        public void testRepeat() throws Exception {
+            runTest("idea/testData/inspectionsLocal/forEachParameterNotUsed/repeat.kt");
+        }
+
+        @TestMetadata("safe.kt")
+        public void testSafe() throws Exception {
+            runTest("idea/testData/inspectionsLocal/forEachParameterNotUsed/safe.kt");
+        }
+
+        @TestMetadata("sequence.kt")
+        public void testSequence() throws Exception {
+            runTest("idea/testData/inspectionsLocal/forEachParameterNotUsed/sequence.kt");
+        }
+
+        @TestMetadata("string.kt")
+        public void testString() throws Exception {
+            runTest("idea/testData/inspectionsLocal/forEachParameterNotUsed/string.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class FunctionWithLambdaExpressionBody extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInFunctionWithLambdaExpressionBody() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("functionHasArrow.kt")
+        public void testFunctionHasArrow() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/functionHasArrow.kt");
+        }
+
+        @TestMetadata("functionHasLabel.kt")
+        public void testFunctionHasLabel() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/functionHasLabel.kt");
+        }
+
+        @TestMetadata("functionHasNoExpressionBody.kt")
+        public void testFunctionHasNoExpressionBody() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/functionHasNoExpressionBody.kt");
+        }
+
+        @TestMetadata("functionHasNoLambda.kt")
+        public void testFunctionHasNoLambda() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/functionHasNoLambda.kt");
+        }
+
+        @TestMetadata("functionHasType.kt")
+        public void testFunctionHasType() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/functionHasType.kt");
+        }
+
+        @TestMetadata("getterHasArrow.kt")
+        public void testGetterHasArrow() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/getterHasArrow.kt");
+        }
+
+        @TestMetadata("getterHasLabel.kt")
+        public void testGetterHasLabel() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/getterHasLabel.kt");
+        }
+
+        @TestMetadata("getterHasNoLambda.kt")
+        public void testGetterHasNoLambda() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/getterHasNoLambda.kt");
+        }
+
+        @TestMetadata("getterHasType.kt")
+        public void testGetterHasType() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/getterHasType.kt");
+        }
+
+        @TestMetadata("getterHasType2.kt")
+        public void testGetterHasType2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/getterHasType2.kt");
+        }
+
+        @TestMetadata("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/addArrow")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class AddArrow extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInAddArrow() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/addArrow"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("function.kt")
+            public void testFunction() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/addArrow/function.kt");
+            }
+
+            @TestMetadata("getter.kt")
+            public void testGetter() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/addArrow/getter.kt");
+            }
+        }
+
+        @TestMetadata("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class RemoveBraces extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInRemoveBraces() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("function.kt")
+            public void testFunction() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces/function.kt");
+            }
+
+            @TestMetadata("functionReturnsNothing.kt")
+            public void testFunctionReturnsNothing() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces/functionReturnsNothing.kt");
+            }
+
+            @TestMetadata("getter.kt")
+            public void testGetter() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces/getter.kt");
+            }
+
+            @TestMetadata("getterReturnsNothing.kt")
+            public void testGetterReturnsNothing() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/removeBraces/getterReturnsNothing.kt");
+            }
+        }
+
+        @TestMetadata("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/specifyType")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class SpecifyType extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInSpecifyType() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/specifyType"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("function.kt")
+            public void testFunction() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/specifyType/function.kt");
+            }
+
+            @TestMetadata("getter.kt")
+            public void testGetter() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/specifyType/getter.kt");
+            }
+        }
+
+        @TestMetadata("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class WrapRun extends AbstractLocalInspectionTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInWrapRun() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("function.kt")
+            public void testFunction() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun/function.kt");
+            }
+
+            @TestMetadata("functionReturnsNothing.kt")
+            public void testFunctionReturnsNothing() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun/functionReturnsNothing.kt");
+            }
+
+            @TestMetadata("getter.kt")
+            public void testGetter() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun/getter.kt");
+            }
+
+            @TestMetadata("getterReturnsNothing.kt")
+            public void testGetterReturnsNothing() throws Exception {
+                runTest("idea/testData/inspectionsLocal/functionWithLambdaExpressionBody/wrapRun/getterReturnsNothing.kt");
+            }
+        }
     }
 
     @TestMetadata("idea/testData/inspectionsLocal/ImplicitNullableNothingType")
@@ -2587,6 +3229,26 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/leakingThis"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
         }
 
+        @TestMetadata("enum.kt")
+        public void testEnum() throws Exception {
+            runTest("idea/testData/inspectionsLocal/leakingThis/enum.kt");
+        }
+
+        @TestMetadata("enumEntryHasOverriddenMember.kt")
+        public void testEnumEntryHasOverriddenMember() throws Exception {
+            runTest("idea/testData/inspectionsLocal/leakingThis/enumEntryHasOverriddenMember.kt");
+        }
+
+        @TestMetadata("enumEntryHasOverriddenMember2.kt")
+        public void testEnumEntryHasOverriddenMember2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/leakingThis/enumEntryHasOverriddenMember2.kt");
+        }
+
+        @TestMetadata("inClassLiteral.kt")
+        public void testInClassLiteral() throws Exception {
+            runTest("idea/testData/inspectionsLocal/leakingThis/inClassLiteral.kt");
+        }
+
         @TestMetadata("noOpenForInterface.kt")
         public void testNoOpenForInterface() throws Exception {
             runTest("idea/testData/inspectionsLocal/leakingThis/noOpenForInterface.kt");
@@ -2662,6 +3324,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/multipleAssignments.kt");
             }
 
+            @TestMetadata("nullableMutableList.kt")
+            public void testNullableMutableList() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/nullableMutableList.kt");
+            }
+
             @TestMetadata("simpleIf.kt")
             public void testSimpleIf() throws Exception {
                 runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/simpleIf.kt");
@@ -2700,6 +3367,31 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             @TestMetadata("simpleIfWithoutTerminatingAssignment.kt")
             public void testSimpleIfWithoutTerminatingAssignment() throws Exception {
                 runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/simpleIfWithoutTerminatingAssignment.kt");
+            }
+
+            @TestMetadata("typeMismatch.kt")
+            public void testTypeMismatch() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/typeMismatch.kt");
+            }
+
+            @TestMetadata("typeMismatch2.kt")
+            public void testTypeMismatch2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/typeMismatch2.kt");
+            }
+
+            @TestMetadata("typeMismatch3.kt")
+            public void testTypeMismatch3() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/typeMismatch3.kt");
+            }
+
+            @TestMetadata("typeMismatchMutableList.kt")
+            public void testTypeMismatchMutableList() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/typeMismatchMutableList.kt");
+            }
+
+            @TestMetadata("typeMismatchMutableList2.kt")
+            public void testTypeMismatchMutableList2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToAssignment/typeMismatchMutableList2.kt");
             }
         }
 
@@ -2743,6 +3435,16 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             @TestMetadata("innerIfTransformed.kt")
             public void testInnerIfTransformed() throws Exception {
                 runTest("idea/testData/inspectionsLocal/liftOut/ifToReturn/innerIfTransformed.kt");
+            }
+
+            @TestMetadata("onReturn.kt")
+            public void testOnReturn() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToReturn/onReturn.kt");
+            }
+
+            @TestMetadata("onReturn2.kt")
+            public void testOnReturn2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/ifToReturn/onReturn2.kt");
             }
 
             @TestMetadata("simpleIf.kt")
@@ -2876,6 +3578,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/liftOut/tryToReturn/inner.kt");
             }
 
+            @TestMetadata("onReturn.kt")
+            public void testOnReturn() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/tryToReturn/onReturn.kt");
+            }
+
             @TestMetadata("withoutReturn.kt")
             public void testWithoutReturn() throws Exception {
                 runTest("idea/testData/inspectionsLocal/liftOut/tryToReturn/withoutReturn.kt");
@@ -2992,6 +3699,16 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
                 runTest("idea/testData/inspectionsLocal/liftOut/whenToReturn/localReturns.kt");
             }
 
+            @TestMetadata("onReturn.kt")
+            public void testOnReturn() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/whenToReturn/onReturn.kt");
+            }
+
+            @TestMetadata("onReturn2.kt")
+            public void testOnReturn2() throws Exception {
+                runTest("idea/testData/inspectionsLocal/liftOut/whenToReturn/onReturn2.kt");
+            }
+
             @TestMetadata("otherReturns.kt")
             public void testOtherReturns() throws Exception {
                 runTest("idea/testData/inspectionsLocal/liftOut/whenToReturn/otherReturns.kt");
@@ -3084,6 +3801,44 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("unit.kt")
         public void testUnit() throws Exception {
             runTest("idea/testData/inspectionsLocal/mainFunctionReturnUnit/unit.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class MapGetWithNotNullAssertionOperator extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInMapGetWithNotNullAssertionOperator() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("get.kt")
+        public void testGet() throws Exception {
+            runTest("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator/get.kt");
+        }
+
+        @TestMetadata("getValue.kt")
+        public void testGetValue() throws Exception {
+            runTest("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator/getValue.kt");
+        }
+
+        @TestMetadata("indexedAccess.kt")
+        public void testIndexedAccess() throws Exception {
+            runTest("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator/indexedAccess.kt");
+        }
+
+        @TestMetadata("list.kt")
+        public void testList() throws Exception {
+            runTest("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator/list.kt");
+        }
+
+        @TestMetadata("noNotNullAssersion.kt")
+        public void testNoNotNullAssersion() throws Exception {
+            runTest("idea/testData/inspectionsLocal/mapGetWithNotNullAssertionOperator/noNotNullAssersion.kt");
         }
     }
 
@@ -3308,6 +4063,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/moveLambdaOutsideParentheses/ambigousOverload.kt");
         }
 
+        @TestMetadata("delegation.kt")
+        public void testDelegation() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveLambdaOutsideParentheses/delegation.kt");
+        }
+
         @TestMetadata("functionalValueCall.kt")
         public void testFunctionalValueCall() throws Exception {
             runTest("idea/testData/inspectionsLocal/moveLambdaOutsideParentheses/functionalValueCall.kt");
@@ -3517,6 +4277,54 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class MoveVariableDeclarationIntoWhen extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInMoveVariableDeclarationIntoWhen() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("notApplicableOtherName.kt")
+        public void testNotApplicableOtherName() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/notApplicableOtherName.kt");
+        }
+
+        @TestMetadata("notApplicableSideEffect.kt")
+        public void testNotApplicableSideEffect() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/notApplicableSideEffect.kt");
+        }
+
+        @TestMetadata("notApplicableUsedInOtherScope.kt")
+        public void testNotApplicableUsedInOtherScope() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/notApplicableUsedInOtherScope.kt");
+        }
+
+        @TestMetadata("notApplicableVar.kt")
+        public void testNotApplicableVar() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/notApplicableVar.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/simple.kt");
+        }
+
+        @TestMetadata("withComment.kt")
+        public void testWithComment() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/withComment.kt");
+        }
+
+        @TestMetadata("withNewLine.kt")
+        public void testWithNewLine() throws Exception {
+            runTest("idea/testData/inspectionsLocal/moveVariableDeclarationIntoWhen/withNewLine.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/nestedLambdaShadowedImplicitParameter")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -3562,6 +4370,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("notUseParameter.kt")
         public void testNotUseParameter() throws Exception {
             runTest("idea/testData/inspectionsLocal/nestedLambdaShadowedImplicitParameter/notUseParameter.kt");
+        }
+
+        @TestMetadata("notUsedItInParentLambda.kt")
+        public void testNotUsedItInParentLambda() throws Exception {
+            runTest("idea/testData/inspectionsLocal/nestedLambdaShadowedImplicitParameter/notUsedItInParentLambda.kt");
         }
 
         @TestMetadata("receiver.kt")
@@ -3666,6 +4479,24 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/objectLiteralToLambda")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ObjectLiteralToLambda extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInObjectLiteralToLambda() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/objectLiteralToLambda"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("notMatchFunctionParameterType.kt")
+        public void testNotMatchFunctionParameterType() throws Exception {
+            runTest("idea/testData/inspectionsLocal/objectLiteralToLambda/notMatchFunctionParameterType.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/recursiveEqualsCall")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -3746,6 +4577,26 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/redundantCompanionReference/basic.kt");
         }
 
+        @TestMetadata("companionClass.kt")
+        public void testCompanionClass() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/companionClass.kt");
+        }
+
+        @TestMetadata("companionClass2.kt")
+        public void testCompanionClass2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/companionClass2.kt");
+        }
+
+        @TestMetadata("companionClass3.kt")
+        public void testCompanionClass3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/companionClass3.kt");
+        }
+
+        @TestMetadata("companionClass4.kt")
+        public void testCompanionClass4() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/companionClass4.kt");
+        }
+
         @TestMetadata("companionDoubleNested.kt")
         public void testCompanionDoubleNested() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantCompanionReference/companionDoubleNested.kt");
@@ -3774,6 +4625,26 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("import.kt")
         public void testImport() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantCompanionReference/import.kt");
+        }
+
+        @TestMetadata("inEnum.kt")
+        public void testInEnum() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/inEnum.kt");
+        }
+
+        @TestMetadata("inEnumEntry.kt")
+        public void testInEnumEntry() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/inEnumEntry.kt");
+        }
+
+        @TestMetadata("inEnumEntry2.kt")
+        public void testInEnumEntry2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/inEnumEntry2.kt");
+        }
+
+        @TestMetadata("inEnumEntry3.kt")
+        public void testInEnumEntry3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/inEnumEntry3.kt");
         }
 
         @TestMetadata("methodArgument.kt")
@@ -3844,6 +4715,142 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("sameNameMemberVariable.kt")
         public void testSameNameMemberVariable() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameMemberVariable.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberFunction.kt")
+        public void testSameNameSuperMemberFunction() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberFunction.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberFunction2.kt")
+        public void testSameNameSuperMemberFunction2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberFunction2.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberFunction3.kt")
+        public void testSameNameSuperMemberFunction3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberFunction3.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberVariable.kt")
+        public void testSameNameSuperMemberVariable() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberVariable.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberVariable2.kt")
+        public void testSameNameSuperMemberVariable2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberVariable2.kt");
+        }
+
+        @TestMetadata("sameNameSuperMemberVariable3.kt")
+        public void testSameNameSuperMemberVariable3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantCompanionReference/sameNameSuperMemberVariable3.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/redundantElseInIf")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class RedundantElseInIf extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInRedundantElseInIf() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/redundantElseInIf"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("empty.kt")
+        public void testEmpty() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/empty.kt");
+        }
+
+        @TestMetadata("inLambda.kt")
+        public void testInLambda() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/inLambda.kt");
+        }
+
+        @TestMetadata("noElse.kt")
+        public void testNoElse() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/noElse.kt");
+        }
+
+        @TestMetadata("notNothing.kt")
+        public void testNotNothing() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/notNothing.kt");
+        }
+
+        @TestMetadata("notReturn.kt")
+        public void testNotReturn() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/notReturn.kt");
+        }
+
+        @TestMetadata("redundant.kt")
+        public void testRedundant() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundant.kt");
+        }
+
+        @TestMetadata("redundant2.kt")
+        public void testRedundant2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundant2.kt");
+        }
+
+        @TestMetadata("redundant3.kt")
+        public void testRedundant3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundant3.kt");
+        }
+
+        @TestMetadata("redundant4.kt")
+        public void testRedundant4() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundant4.kt");
+        }
+
+        @TestMetadata("redundantSingleLine.kt")
+        public void testRedundantSingleLine() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundantSingleLine.kt");
+        }
+
+        @TestMetadata("redundantSingleLine2.kt")
+        public void testRedundantSingleLine2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/redundantSingleLine2.kt");
+        }
+
+        @TestMetadata("usedAsExpression.kt")
+        public void testUsedAsExpression() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantElseInIf/usedAsExpression.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class RedundantEnumConstructorInvocation extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInRedundantEnumConstructorInvocation() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("basic.kt")
+        public void testBasic() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation/basic.kt");
+        }
+
+        @TestMetadata("basic2.kt")
+        public void testBasic2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation/basic2.kt");
+        }
+
+        @TestMetadata("hasArgument.kt")
+        public void testHasArgument() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation/hasArgument.kt");
+        }
+
+        @TestMetadata("hasError.kt")
+        public void testHasError() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantEnumConstructorInvocation/hasError.kt");
         }
     }
 
@@ -3933,6 +4940,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         public void testTop() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantExplicitType/top.kt");
         }
+
+        @TestMetadata("typealias.kt")
+        public void testTypealias() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantExplicitType/typealias.kt");
+        }
     }
 
     @TestMetadata("idea/testData/inspectionsLocal/redundantGetter")
@@ -4005,14 +5017,94 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/redundantLambdaArrow"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
         }
 
+        @TestMetadata("forEach.kt")
+        public void testForEach() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/forEach.kt");
+        }
+
+        @TestMetadata("forEachWithIt.kt")
+        public void testForEachWithIt() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/forEachWithIt.kt");
+        }
+
         @TestMetadata("hasArguments.kt")
         public void testHasArguments() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/hasArguments.kt");
         }
 
+        @TestMetadata("inIfElse.kt")
+        public void testInIfElse() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfElse.kt");
+        }
+
+        @TestMetadata("inIfElse2.kt")
+        public void testInIfElse2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfElse2.kt");
+        }
+
+        @TestMetadata("inIfThen.kt")
+        public void testInIfThen() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfThen.kt");
+        }
+
+        @TestMetadata("inIfThen2.kt")
+        public void testInIfThen2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfThen2.kt");
+        }
+
+        @TestMetadata("inIfWhenEntry.kt")
+        public void testInIfWhenEntry() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfWhenEntry.kt");
+        }
+
+        @TestMetadata("inIfWhenEntry2.kt")
+        public void testInIfWhenEntry2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/inIfWhenEntry2.kt");
+        }
+
+        @TestMetadata("it.kt")
+        public void testIt() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/it.kt");
+        }
+
+        @TestMetadata("nestedLambda.kt")
+        public void testNestedLambda() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/nestedLambda.kt");
+        }
+
+        @TestMetadata("nestedLambda2.kt")
+        public void testNestedLambda2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/nestedLambda2.kt");
+        }
+
+        @TestMetadata("nestedLambda3.kt")
+        public void testNestedLambda3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/nestedLambda3.kt");
+        }
+
+        @TestMetadata("noExpectedType.kt")
+        public void testNoExpectedType() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/noExpectedType.kt");
+        }
+
         @TestMetadata("simple.kt")
         public void testSimple() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/simple.kt");
+        }
+
+        @TestMetadata("typeParameter.kt")
+        public void testTypeParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/typeParameter.kt");
+        }
+
+        @TestMetadata("typeParameter2.kt")
+        public void testTypeParameter2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/typeParameter2.kt");
+        }
+
+        @TestMetadata("typeParameter3.kt")
+        public void testTypeParameter3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantLambdaArrow/typeParameter3.kt");
         }
 
         @TestMetadata("underscore.kt")
@@ -4172,6 +5264,54 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/redundantRequireNotNullCall")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class RedundantRequireNotNullCall extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInRedundantRequireNotNullCall() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/redundantRequireNotNullCall"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("checkNotNull.kt")
+        public void testCheckNotNull() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/checkNotNull.kt");
+        }
+
+        @TestMetadata("notNull.kt")
+        public void testNotNull() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/notNull.kt");
+        }
+
+        @TestMetadata("notNull2.kt")
+        public void testNotNull2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/notNull2.kt");
+        }
+
+        @TestMetadata("notNull3.kt")
+        public void testNotNull3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/notNull3.kt");
+        }
+
+        @TestMetadata("nullable.kt")
+        public void testNullable() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/nullable.kt");
+        }
+
+        @TestMetadata("nullable2.kt")
+        public void testNullable2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/nullable2.kt");
+        }
+
+        @TestMetadata("require.kt")
+        public void testRequire() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantRequireNotNullCall/require.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/redundantReturnLabel")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -4220,6 +5360,16 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("nestedInterface.kt")
         public void testNestedInterface() throws Exception {
             runTest("idea/testData/inspectionsLocal/redundantSamConstructor/nestedInterface.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantSamConstructor/simple.kt");
+        }
+
+        @TestMetadata("simple2.kt")
+        public void testSimple2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantSamConstructor/simple2.kt");
         }
     }
 
@@ -4550,6 +5700,24 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/redundantVisibilityModifier")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class RedundantVisibilityModifier extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInRedundantVisibilityModifier() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/redundantVisibilityModifier"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("overridePropertySetter.kt")
+        public void testOverridePropertySetter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/redundantVisibilityModifier/overridePropertySetter.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/redundantWith")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -4663,6 +5831,49 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class RemoveEmptyParenthesesFromAnnotationEntry extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInRemoveEmptyParenthesesFromAnnotationEntry() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("allParameterHaveDefaults.kt")
+        public void testAllParameterHaveDefaults() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/allParameterHaveDefaults.kt");
+        }
+
+        @TestMetadata("annotatedExpr.kt")
+        public void testAnnotatedExpr() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/annotatedExpr.kt");
+        }
+
+        @TestMetadata("parenthesesWithWhitespace.kt")
+        public void testParenthesesWithWhitespace() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/parenthesesWithWhitespace.kt");
+        }
+
+        @TestMetadata("requiresArguments.kt")
+        public void testRequiresArguments() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/requiresArguments.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/simple.kt");
+        }
+
+        @TestMetadata("usingJavaAnnotation.kt")
+        public void testUsingJavaAnnotation() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeEmptyParenthesesFromAnnotationEntry/usingJavaAnnotation.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/removeRedundantBackticks")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -4698,6 +5909,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("property.kt")
         public void testProperty() throws Exception {
             runTest("idea/testData/inspectionsLocal/removeRedundantBackticks/property.kt");
+        }
+
+        @TestMetadata("underscore.kt")
+        public void testUnderscore() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeRedundantBackticks/underscore.kt");
         }
 
         @TestMetadata("yield.kt")
@@ -4801,6 +6017,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("shortArrayOf.kt")
         public void testShortArrayOf() throws Exception {
             runTest("idea/testData/inspectionsLocal/removeRedundantSpreadOperator/shortArrayOf.kt");
+        }
+
+        @TestMetadata("spredOperatorArgument.kt")
+        public void testSpredOperatorArgument() throws Exception {
+            runTest("idea/testData/inspectionsLocal/removeRedundantSpreadOperator/spredOperatorArgument.kt");
         }
     }
 
@@ -4946,6 +6167,34 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/replaceArraysCopyOfWithCopyOf")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ReplaceArraysCopyOfWithCopyOf extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInReplaceArraysCopyOfWithCopyOf() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/replaceArraysCopyOfWithCopyOf"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("nonArraysCopyOf.kt")
+        public void testNonArraysCopyOf() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceArraysCopyOfWithCopyOf/nonArraysCopyOf.kt");
+        }
+
+        @TestMetadata("qualified.kt")
+        public void testQualified() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceArraysCopyOfWithCopyOf/qualified.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceArraysCopyOfWithCopyOf/simple.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/replaceAssertBooleanWithAssertEquality")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -4996,6 +6245,24 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("assertTrueWithMessage.kt")
         public void testAssertTrueWithMessage() throws Exception {
             runTest("idea/testData/inspectionsLocal/replaceAssertBooleanWithAssertEquality/assertTrueWithMessage.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/replaceNegatedIsEmptyWithIsNotEmpty")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ReplaceNegatedIsEmptyWithIsNotEmpty extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInReplaceNegatedIsEmptyWithIsNotEmpty() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/replaceNegatedIsEmptyWithIsNotEmpty"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceNegatedIsEmptyWithIsNotEmpty/simple.kt");
         }
     }
 
@@ -5056,6 +6323,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/replacePutWithAssignment/putOnParameter.kt");
         }
 
+        @TestMetadata("putOnSuper.kt")
+        public void testPutOnSuper() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replacePutWithAssignment/putOnSuper.kt");
+        }
+
         @TestMetadata("putOnThis.kt")
         public void testPutOnThis() throws Exception {
             runTest("idea/testData/inspectionsLocal/replacePutWithAssignment/putOnThis.kt");
@@ -5107,6 +6379,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("operatorLong.kt")
         public void testOperatorLong() throws Exception {
             runTest("idea/testData/inspectionsLocal/replaceRangeToWithUntil/operatorLong.kt");
+        }
+
+        @TestMetadata("parentheses.kt")
+        public void testParentheses() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceRangeToWithUntil/parentheses.kt");
         }
 
         @TestMetadata("plusOne.kt")
@@ -5309,6 +6586,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/replaceWithOperatorAssignment/invalidSubtraction.kt");
         }
 
+        @TestMetadata("list.kt")
+        public void testList() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceWithOperatorAssignment/list.kt");
+        }
+
         @TestMetadata("multipleOperators.kt")
         public void testMultipleOperators() throws Exception {
             runTest("idea/testData/inspectionsLocal/replaceWithOperatorAssignment/multipleOperators.kt");
@@ -5317,6 +6599,11 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("multipleOperatorsRightSideRepeat.kt")
         public void testMultipleOperatorsRightSideRepeat() throws Exception {
             runTest("idea/testData/inspectionsLocal/replaceWithOperatorAssignment/multipleOperatorsRightSideRepeat.kt");
+        }
+
+        @TestMetadata("mutableList.kt")
+        public void testMutableList() throws Exception {
+            runTest("idea/testData/inspectionsLocal/replaceWithOperatorAssignment/mutableList.kt");
         }
 
         @TestMetadata("nonCommutativeRepeat.kt")
@@ -5380,6 +6667,21 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("labeledReturn.kt")
         public void testLabeledReturn() throws Exception {
             runTest("idea/testData/inspectionsLocal/safeCastWithReturn/labeledReturn.kt");
+        }
+
+        @TestMetadata("lambdaLastStatement.kt")
+        public void testLambdaLastStatement() throws Exception {
+            runTest("idea/testData/inspectionsLocal/safeCastWithReturn/lambdaLastStatement.kt");
+        }
+
+        @TestMetadata("lambdaLastStatement2.kt")
+        public void testLambdaLastStatement2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/safeCastWithReturn/lambdaLastStatement2.kt");
+        }
+
+        @TestMetadata("lambdaLastStatement3.kt")
+        public void testLambdaLastStatement3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/safeCastWithReturn/lambdaLastStatement3.kt");
         }
 
         @TestMetadata("simple.kt")
@@ -5691,6 +6993,94 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/setterBackingFieldAssignment")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class SetterBackingFieldAssignment extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInSetterBackingFieldAssignment() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/setterBackingFieldAssignment"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("assignment.kt")
+        public void testAssignment() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/assignment.kt");
+        }
+
+        @TestMetadata("decrement.kt")
+        public void testDecrement() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/decrement.kt");
+        }
+
+        @TestMetadata("decrement2.kt")
+        public void testDecrement2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/decrement2.kt");
+        }
+
+        @TestMetadata("divAssign.kt")
+        public void testDivAssign() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/divAssign.kt");
+        }
+
+        @TestMetadata("functionCallWithSetterParam.kt")
+        public void testFunctionCallWithSetterParam() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/functionCallWithSetterParam.kt");
+        }
+
+        @TestMetadata("increment.kt")
+        public void testIncrement() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/increment.kt");
+        }
+
+        @TestMetadata("increment2.kt")
+        public void testIncrement2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/increment2.kt");
+        }
+
+        @TestMetadata("minusAssign.kt")
+        public void testMinusAssign() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/minusAssign.kt");
+        }
+
+        @TestMetadata("modAssign.kt")
+        public void testModAssign() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/modAssign.kt");
+        }
+
+        @TestMetadata("noAssignment.kt")
+        public void testNoAssignment() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/noAssignment.kt");
+        }
+
+        @TestMetadata("noAssignment2.kt")
+        public void testNoAssignment2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/noAssignment2.kt");
+        }
+
+        @TestMetadata("noAssignment3.kt")
+        public void testNoAssignment3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/noAssignment3.kt");
+        }
+
+        @TestMetadata("noBackingField.kt")
+        public void testNoBackingField() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/noBackingField.kt");
+        }
+
+        @TestMetadata("plusAssign.kt")
+        public void testPlusAssign() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/plusAssign.kt");
+        }
+
+        @TestMetadata("timesAssign.kt")
+        public void testTimesAssign() throws Exception {
+            runTest("idea/testData/inspectionsLocal/setterBackingFieldAssignment/timesAssign.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/simplifyAssertNotNull")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -5945,9 +7335,19 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/sortModifiers/annotatedBefore.kt");
         }
 
+        @TestMetadata("annotatedBefore2.kt")
+        public void testAnnotatedBefore2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/sortModifiers/annotatedBefore2.kt");
+        }
+
         @TestMetadata("annotation.kt")
         public void testAnnotation() throws Exception {
             runTest("idea/testData/inspectionsLocal/sortModifiers/annotation.kt");
+        }
+
+        @TestMetadata("annotation2.kt")
+        public void testAnnotation2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/sortModifiers/annotation2.kt");
         }
 
         @TestMetadata("annotationGroup.kt")
@@ -5986,6 +7386,130 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("simple.kt")
         public void testSimple() throws Exception {
             runTest("idea/testData/inspectionsLocal/suspiciousAsDynamic/simple.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/suspiciousCollectionReassignment")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class SuspiciousCollectionReassignment extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInSuspiciousCollectionReassignment() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/suspiciousCollectionReassignment"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("hasError.kt")
+        public void testHasError() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/hasError.kt");
+        }
+
+        @TestMetadata("int.kt")
+        public void testInt() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/int.kt");
+        }
+
+        @TestMetadata("minus.kt")
+        public void testMinus() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/minus.kt");
+        }
+
+        @TestMetadata("mutableList.kt")
+        public void testMutableList() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/mutableList.kt");
+        }
+
+        @TestMetadata("mutableMap.kt")
+        public void testMutableMap() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/mutableMap.kt");
+        }
+
+        @TestMetadata("mutableSet.kt")
+        public void testMutableSet() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/mutableSet.kt");
+        }
+
+        @TestMetadata("plus.kt")
+        public void testPlus() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/plus.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/simple.kt");
+        }
+
+        @TestMetadata("val.kt")
+        public void testVal() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousCollectionReassignment/val.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/suspiciousVarProperty")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class SuspiciousVarProperty extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInSuspiciousVarProperty() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/suspiciousVarProperty"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("hasBackingFieldRef.kt")
+        public void testHasBackingFieldRef() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousVarProperty/hasBackingFieldRef.kt");
+        }
+
+        @TestMetadata("hasBackingFieldRef2.kt")
+        public void testHasBackingFieldRef2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousVarProperty/hasBackingFieldRef2.kt");
+        }
+
+        @TestMetadata("hasSetter.kt")
+        public void testHasSetter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousVarProperty/hasSetter.kt");
+        }
+
+        @TestMetadata("noBackingFieldRef.kt")
+        public void testNoBackingFieldRef() throws Exception {
+            runTest("idea/testData/inspectionsLocal/suspiciousVarProperty/noBackingFieldRef.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class UnlabeledReturnInsideLambda extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInUnlabeledReturnInsideLambda() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("labeledReturn.kt")
+        public void testLabeledReturn() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda/labeledReturn.kt");
+        }
+
+        @TestMetadata("notInlineFunction.kt")
+        public void testNotInlineFunction() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda/notInlineFunction.kt");
+        }
+
+        @TestMetadata("return.kt")
+        public void testReturn() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda/return.kt");
+        }
+
+        @TestMetadata("returnInFunction.kt")
+        public void testReturnInFunction() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unlabeledReturnInsideLambda/returnInFunction.kt");
         }
     }
 
@@ -6108,6 +7632,34 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         }
     }
 
+    @TestMetadata("idea/testData/inspectionsLocal/unusedMainParameter")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class UnusedMainParameter extends AbstractLocalInspectionTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInUnusedMainParameter() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/inspectionsLocal/unusedMainParameter"), Pattern.compile("^([\\w\\-_]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("future.kt")
+        public void testFuture() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedMainParameter/future.kt");
+        }
+
+        @TestMetadata("legacy.kt")
+        public void testLegacy() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedMainParameter/legacy.kt");
+        }
+
+        @TestMetadata("simple.kt")
+        public void testSimple() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedMainParameter/simple.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/inspectionsLocal/unusedReceiverParameter")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -6140,6 +7692,31 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionInSameClass2.kt");
         }
 
+        @TestMetadata("functionWithTypeParameter.kt")
+        public void testFunctionWithTypeParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionWithTypeParameter.kt");
+        }
+
+        @TestMetadata("functionWithTypeParameter2.kt")
+        public void testFunctionWithTypeParameter2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionWithTypeParameter2.kt");
+        }
+
+        @TestMetadata("functionWithTypeParameter3.kt")
+        public void testFunctionWithTypeParameter3() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionWithTypeParameter3.kt");
+        }
+
+        @TestMetadata("functionWithTypeParameterInClass.kt")
+        public void testFunctionWithTypeParameterInClass() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionWithTypeParameterInClass.kt");
+        }
+
+        @TestMetadata("functionWithTypeParameterInClass2.kt")
+        public void testFunctionWithTypeParameterInClass2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/functionWithTypeParameterInClass2.kt");
+        }
+
         @TestMetadata("infix.kt")
         public void testInfix() throws Exception {
             runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/infix.kt");
@@ -6158,6 +7735,21 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("propertyInSameClass.kt")
         public void testPropertyInSameClass() throws Exception {
             runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/propertyInSameClass.kt");
+        }
+
+        @TestMetadata("propertyWithTypeParameter.kt")
+        public void testPropertyWithTypeParameter() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/propertyWithTypeParameter.kt");
+        }
+
+        @TestMetadata("propertyWithTypeParameterInClass.kt")
+        public void testPropertyWithTypeParameterInClass() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/propertyWithTypeParameterInClass.kt");
+        }
+
+        @TestMetadata("propertyWithTypeParameterInClass2.kt")
+        public void testPropertyWithTypeParameterInClass2() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedReceiverParameter/propertyWithTypeParameterInClass2.kt");
         }
     }
 
@@ -6188,6 +7780,16 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
             runTest("idea/testData/inspectionsLocal/unusedSymbol/dataInlineClassDeclaration.kt");
         }
 
+        @TestMetadata("functionWithInlineClass.kt")
+        public void testFunctionWithInlineClass() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedSymbol/functionWithInlineClass.kt");
+        }
+
+        @TestMetadata("functionWithInlineClassReceiver.kt")
+        public void testFunctionWithInlineClassReceiver() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedSymbol/functionWithInlineClassReceiver.kt");
+        }
+
         @TestMetadata("inAnonymous.kt")
         public void testInAnonymous() throws Exception {
             runTest("idea/testData/inspectionsLocal/unusedSymbol/inAnonymous.kt");
@@ -6201,6 +7803,16 @@ public class LocalInspectionTestGenerated extends AbstractLocalInspectionTest {
         @TestMetadata("inAnonymousRunWrapped.kt")
         public void testInAnonymousRunWrapped() throws Exception {
             runTest("idea/testData/inspectionsLocal/unusedSymbol/inAnonymousRunWrapped.kt");
+        }
+
+        @TestMetadata("inlineClassConstructor.kt")
+        public void testInlineClassConstructor() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedSymbol/inlineClassConstructor.kt");
+        }
+
+        @TestMetadata("inlineClassMemberFunction.kt")
+        public void testInlineClassMemberFunction() throws Exception {
+            runTest("idea/testData/inspectionsLocal/unusedSymbol/inlineClassMemberFunction.kt");
         }
 
         @TestMetadata("internal.kt")

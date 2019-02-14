@@ -69,6 +69,7 @@ public class DefaultErrorMessages {
         MAP.put(PROTECTED_CONSTRUCTOR_NOT_IN_SUPER_CALL, "Protected constructor ''{0}'' from other classes can only be used in super-call", Renderers.SHORT_NAMES_IN_TYPES);
 
         MAP.put(EXPOSED_PROPERTY_TYPE, "''{0}'' property exposes its ''{2}'' type{1}", TO_STRING, TO_STRING, TO_STRING);
+        MAP.put(EXPOSED_PROPERTY_TYPE_IN_CONSTRUCTOR, "''{0}'' property exposes its ''{2}'' type{1}", TO_STRING, TO_STRING, TO_STRING);
         MAP.put(EXPOSED_FUNCTION_RETURN_TYPE, "''{0}'' function exposes its ''{2}'' return type{1}", TO_STRING, TO_STRING, TO_STRING);
         MAP.put(EXPOSED_PARAMETER_TYPE, "''{0}'' function exposes its ''{2}'' parameter type{1}", TO_STRING, TO_STRING, TO_STRING);
         MAP.put(EXPOSED_RECEIVER_TYPE, "''{0}'' member exposes its ''{2}'' receiver type{1}", TO_STRING, TO_STRING, TO_STRING);
@@ -362,8 +363,11 @@ public class DefaultErrorMessages {
 
         MAP.put(MISSING_DEPENDENCY_CLASS, "Cannot access class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
         MAP.put(MISSING_SCRIPT_BASE_CLASS, "Cannot access script base class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
+        MAP.put(MISSING_SCRIPT_STANDARD_TEMPLATE, "No script runtime was found in the classpath: class ''{0}'' not found. Please add kotlin-script-runtime.jar to the module dependencies.", TO_STRING);
         MAP.put(MISSING_SCRIPT_RECEIVER_CLASS, "Cannot access implicit script receiver class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
-        MAP.put(MISSING_SCRIPT_ENVIRONMENT_PROPERTY_CLASS, "Cannot access script environment property class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
+        MAP.put(MISSING_IMPORTED_SCRIPT_FILE, "Cannot find imported script file ''{0}''. Check your script imports", TO_STRING);
+        MAP.put(MISSING_IMPORTED_SCRIPT_PSI, "Imported script file ''{0}'' is not loaded. Check your script imports", TO_STRING);
+        MAP.put(MISSING_SCRIPT_PROVIDED_PROPERTY_CLASS, "Cannot access script provided property class ''{0}''. Check your module classpath for missing or conflicting dependencies", TO_STRING);
         MAP.put(PRE_RELEASE_CLASS, "{0} is compiled by a pre-release version of Kotlin and cannot be loaded by this version of the compiler", TO_STRING);
         MAP.put(INCOMPATIBLE_CLASS,
                 "{0} was compiled with an incompatible version of Kotlin. {1}",
@@ -395,6 +399,8 @@ public class DefaultErrorMessages {
         MAP.put(LOCAL_EXTENSION_PROPERTY, "Local extension properties are not allowed");
         MAP.put(LOCAL_VARIABLE_WITH_GETTER, "Local variables are not allowed to have getters");
         MAP.put(LOCAL_VARIABLE_WITH_SETTER, "Local variables are not allowed to have setters");
+        MAP.put(LOCAL_VARIABLE_WITH_TYPE_PARAMETERS_WARNING, "Type parameters for local variables are deprecated");
+        MAP.put(LOCAL_VARIABLE_WITH_TYPE_PARAMETERS, "Local variables are not allowed to have type parameters");
         MAP.put(VAL_WITH_SETTER, "A 'val'-property cannot have a setter");
 
         MAP.put(DEPRECATED_IDENTITY_EQUALS, "Identity equality for arguments of types {0} and {1} is deprecated", RENDER_TYPE, RENDER_TYPE);
@@ -493,6 +499,9 @@ public class DefaultErrorMessages {
         MAP.put(RETURN_IN_FUNCTION_WITH_EXPRESSION_BODY,
                 "Returns are not allowed for functions with expression body. Use block body in '{...}'");
         MAP.put(NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY, "A 'return' expression required in a function with a block body ('{...}')");
+        MAP.put(NO_RETURN_IN_FUNCTION_WITH_BLOCK_BODY_MIGRATION, "A 'return' expression required in a function with a block body ('{...}'). " +
+                                                                 "If you got this error after the compiler update, then it's most likely due to a fix of a bug " +
+                                                                 "introduced in 1.3.0 (see KT-28061 for details)");
         MAP.put(RETURN_TYPE_MISMATCH, "This function must return a value of type {0}", RENDER_TYPE);
         MAP.put(EXPECTED_TYPE_MISMATCH, "Expected a value of type {0}", RENDER_TYPE);
         MAP.put(ASSIGNMENT_TYPE_MISMATCH,
@@ -728,6 +737,8 @@ public class DefaultErrorMessages {
             //noinspection ConstantConditions
             return nameExpression.getReferencedName();
         }, RENDER_TYPE, RENDER_TYPE);
+
+        MAP.put(INCOMPATIBLE_ENUM_COMPARISON, "Comparison of incompatible enums ''{0}'' and ''{1}'' is always unsuccessful", RENDER_TYPE, RENDER_TYPE);
 
         MAP.put(SENSELESS_COMPARISON, "Condition ''{0}'' is always ''{1}''", ELEMENT_TEXT, TO_STRING);
         MAP.put(SENSELESS_NULL_IN_WHEN, "Expression under 'when' is never equal to null");

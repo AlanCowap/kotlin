@@ -48,6 +48,7 @@ interface KotlinGradleModel : Serializable {
     val coroutines: String?
     val platformPluginId: String?
     val implements: List<String>
+    val kotlinTarget: String?
 }
 
 class KotlinGradleModelImpl(
@@ -55,7 +56,8 @@ class KotlinGradleModelImpl(
         override val compilerArgumentsBySourceSet: CompilerArgumentsBySourceSet,
         override val coroutines: String?,
         override val platformPluginId: String?,
-        override val implements: List<String>
+        override val implements: List<String>,
+        override val kotlinTarget: String? = null
 ) : KotlinGradleModel
 
 abstract class AbstractKotlinGradleModelBuilder : ModelBuilderService {
@@ -103,7 +105,7 @@ class KotlinGradleModelBuilder : AbstractKotlinGradleModelBuilder() {
         return try {
             javaClass.getDeclaredMethod(methodName).invoke(this) as List<String>
         }
-        catch (e : NoSuchMethodException) {
+        catch (e : Exception) {
             // No argument accessor method is available
             emptyList()
         }
@@ -170,7 +172,8 @@ class KotlinGradleModelBuilder : AbstractKotlinGradleModelBuilder() {
                 compilerArgumentsBySourceSet,
                 getCoroutines(project),
                 platform,
-                implementedProjects.map { it.pathOrName() }
+                implementedProjects.map { it.pathOrName() },
+                platform ?: kotlinPluginId
         )
     }
 }

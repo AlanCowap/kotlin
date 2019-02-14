@@ -60,6 +60,7 @@ enum class PrimitiveType {
         val defaultPrimitives = PrimitiveType.values().toSet() - unsignedPrimitives
         val numericPrimitives = setOf(Int, Long, Byte, Short, Double, Float)
         val integralPrimitives = setOf(Int, Long, Byte, Short, Char)
+        val floatingPointPrimitives = setOf(Double, Float)
         val rangePrimitives = setOf(Int, Long, Char, UInt, ULong)
 
         val descendingByDomainCapacity = listOf(Double, Float, Long, Int, Short, Char, Byte)
@@ -73,6 +74,8 @@ enum class PrimitiveType {
 
 fun PrimitiveType.isIntegral(): Boolean = this in PrimitiveType.integralPrimitives
 fun PrimitiveType.isNumeric(): Boolean = this in PrimitiveType.numericPrimitives
+fun PrimitiveType.isFloatingPoint(): Boolean = this in PrimitiveType.floatingPointPrimitives
+
 enum class Inline {
     No,
     Yes,
@@ -86,12 +89,26 @@ enum class Platform {
     Common,
     JVM,
     JS,
-    Native;
+    Native
+}
+
+enum class Backend {
+    Any,
+    Legacy,
+    IR
+}
+
+enum class KotlinTarget(val platform: Platform, val backend: Backend) {
+    Common(Platform.Common, Backend.Any),
+    JVM(Platform.JVM, Backend.Any),
+    JS(Platform.JS, Backend.Legacy),
+    JS_IR(Platform.JS, Backend.IR),
+    Native(Platform.Native, Backend.IR);
 
     val fullName get() = "Kotlin/$name"
 
     companion object {
-        val values = values().toList()
+        val values = KotlinTarget.values().toList()
     }
 }
 

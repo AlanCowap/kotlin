@@ -675,7 +675,7 @@ class LazyJavaClassMemberScope(
                 method.name,
                 // Parameters of annotation constructors in Java are never nullable
                 TypeUtils.makeNotNullable(returnType),
-                method.hasAnnotationParameterDefaultValue,
+                method.annotationParameterDefaultValue != null,
                 /* isCrossinline = */ false,
                 /* isNoinline = */ false,
                 // Nulls are not allowed in annotation arguments in Java
@@ -706,7 +706,12 @@ class LazyJavaClassMemberScope(
                 )
             } else null
         } else {
-            c.components.finder.findClass(ownerDescriptor.classId!!.createNestedClassId(name))?.let {
+            c.components.finder.findClass(
+                JavaClassFinder.Request(
+                    ownerDescriptor.classId!!.createNestedClassId(name),
+                    outerClass = jClass
+                )
+            )?.let {
                 LazyJavaClassDescriptor(c, ownerDescriptor, it)
                     .also(c.components.javaClassesTracker::reportClass)
             }

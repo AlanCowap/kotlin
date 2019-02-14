@@ -5,14 +5,13 @@
 
 package org.jetbrains.kotlin.scripts
 
-import org.jetbrains.kotlin.cli.common.script.CliScriptDefinitionProvider
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.ScriptDefinitionsSource
+import org.jetbrains.kotlin.scripting.legacy.CliScriptDefinitionProvider
 import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.coroutines.experimental.buildSequence
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
 class ScriptProviderTest : KtUsefulTestCase() {
@@ -71,7 +70,7 @@ private class TestScriptDefinitionSource(val counter: AtomicInteger, val defGens
 {
     constructor(counter: AtomicInteger, vararg suffixes: String) : this(counter, suffixes.map { { FakeScriptDefinition(it) } })
 
-    override val definitions: Sequence<KotlinScriptDefinition> = buildSequence<FakeScriptDefinition> {
+    override val definitions: Sequence<KotlinScriptDefinition> = sequence {
         for (gen in defGens) {
             counter.incrementAndGet()
             yield(gen())

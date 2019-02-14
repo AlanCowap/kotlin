@@ -6,7 +6,6 @@
 package test.comparisons
 
 import kotlin.test.*
-import kotlin.comparisons.*
 
 data class Item(val name: String, val rating: Int) : Comparable<Item> {
     public override fun compareTo(other: Item): Int {
@@ -161,6 +160,8 @@ class OrderingTest {
 
         assertEquals(Double.POSITIVE_INFINITY, maxOf(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY))
         assertEquals(Double.POSITIVE_INFINITY, maxOf(Double.POSITIVE_INFINITY, Double.MAX_VALUE, Double.MIN_VALUE))
+        assertEquals(0.0, maxOf(0.0, -0.0))
+        assertEquals(0.0, maxOf(-0.0, 0.0))
     }
 
     @Test
@@ -181,6 +182,8 @@ class OrderingTest {
 
         assertEquals(Double.NEGATIVE_INFINITY, minOf(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY))
         assertEquals(Double.MIN_VALUE, minOf(Double.POSITIVE_INFINITY, Double.MAX_VALUE, Double.MIN_VALUE))
+        assertEquals(-0.0, minOf(0.0, -0.0))
+        assertEquals(-0.0, minOf(-0.0, 0.0))
     }
 
     @Test

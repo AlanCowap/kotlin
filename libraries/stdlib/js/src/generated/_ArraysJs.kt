@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -13,9 +13,6 @@ package kotlin.collections
 import kotlin.js.*
 import primitiveArrayConcat
 import withType
-import kotlin.*
-import kotlin.text.*
-import kotlin.comparisons.*
 
 /**
  * Returns a [List] that wraps the original array.
@@ -100,6 +97,9 @@ public actual fun CharArray.asList(): List<Char> {
  * 
  * If two corresponding elements are nested arrays, they are also compared deeply.
  * If any of arrays contains itself on any nesting level the behavior is undefined.
+ * 
+ * The elements of other types are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayDeepEquals")
@@ -137,6 +137,9 @@ public actual fun <T> Array<out T>.contentDeepToString(): String {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -147,6 +150,9 @@ public actual infix fun <T> Array<out T>.contentEquals(other: Array<out T>): Boo
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -157,6 +163,9 @@ public actual infix fun ByteArray.contentEquals(other: ByteArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -167,6 +176,9 @@ public actual infix fun ShortArray.contentEquals(other: ShortArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -177,6 +189,9 @@ public actual infix fun IntArray.contentEquals(other: IntArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -187,6 +202,9 @@ public actual infix fun LongArray.contentEquals(other: LongArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -197,6 +215,9 @@ public actual infix fun FloatArray.contentEquals(other: FloatArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -207,6 +228,9 @@ public actual infix fun DoubleArray.contentEquals(other: DoubleArray): Boolean {
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -217,6 +241,9 @@ public actual infix fun BooleanArray.contentEquals(other: BooleanArray): Boolean
 /**
  * Returns `true` if the two specified arrays are *structurally* equal to one another,
  * i.e. contain the same number of the same elements in the same order.
+ * 
+ * The elements are compared for equality with the [equals][Any.equals] function.
+ * For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
  */
 @SinceKotlin("1.1")
 @library("arrayEquals")
@@ -415,7 +442,7 @@ public actual fun CharArray.contentToString(): String {
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -439,7 +466,7 @@ public actual inline fun <T> Array<out T>.copyInto(destination: Array<T>, destin
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -463,7 +490,7 @@ public actual inline fun ByteArray.copyInto(destination: ByteArray, destinationO
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -487,7 +514,7 @@ public actual inline fun ShortArray.copyInto(destination: ShortArray, destinatio
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -511,7 +538,7 @@ public actual inline fun IntArray.copyInto(destination: IntArray, destinationOff
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -535,7 +562,7 @@ public actual inline fun LongArray.copyInto(destination: LongArray, destinationO
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -559,7 +586,7 @@ public actual inline fun FloatArray.copyInto(destination: FloatArray, destinatio
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -583,7 +610,7 @@ public actual inline fun DoubleArray.copyInto(destination: DoubleArray, destinat
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -607,7 +634,7 @@ public actual inline fun BooleanArray.copyInto(destination: BooleanArray, destin
  * @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
  * 
  * @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
- * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+ * @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
  * or when that index is out of the [destination] array indices range.
  * 
  * @return the [destination] array.
@@ -1162,8 +1189,7 @@ public actual fun IntArray.sort(): Unit {
  * Sorts the array in-place.
  */
 public actual fun LongArray.sort(): Unit {
-    if (size > 1)
-        sort { a: Long, b: Long -> a.compareTo(b) }
+    if (size > 1) sort { a: Long, b: Long -> a.compareTo(b) }
 }
 
 /**
@@ -1208,18 +1234,20 @@ public actual fun CharArray.sort(): Unit {
 
 /**
  * Sorts the array in-place according to the natural order of its elements.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public actual fun <T : Comparable<T>> Array<out T>.sort(): Unit {
-    if (size > 1)
-        sort { a: T, b: T -> a.compareTo(b) }
+    if (size > 1) sortArray(this)
 }
 
 /**
  * Sorts the array in-place according to the order specified by the given [comparison] function.
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
-@kotlin.internal.InlineOnly
-public inline fun <T> Array<out T>.sort(noinline comparison: (a: T, b: T) -> Int): Unit {
-    asDynamic().sort(comparison)
+public fun <T> Array<out T>.sort(comparison: (a: T, b: T) -> Int): Unit {
+    if (size > 1) sortArrayWith(this, comparison)
 }
 
 /**
@@ -1280,10 +1308,11 @@ public inline fun CharArray.sort(noinline comparison: (a: Char, b: Char) -> Int)
 
 /**
  * Sorts the array in-place according to the order specified by the given [comparator].
+ * 
+ * The sort is _stable_. It means that equal elements preserve their order relative to each other after sorting.
  */
 public actual fun <T> Array<out T>.sortWith(comparator: Comparator<in T>): Unit {
-    if (size > 1)
-        sort { a, b -> comparator.compare(a, b) }
+    if (size > 1) sortArrayWith(this, comparator)
 }
 
 /**
@@ -1311,7 +1340,7 @@ public actual fun IntArray.toTypedArray(): Array<Int> {
  * Returns a *typed* object array containing all of the elements of this primitive array.
  */
 public actual fun LongArray.toTypedArray(): Array<Long> {
-    return copyOf().unsafeCast<Array<Long>>()
+    return js("[]").slice.call(this)
 }
 
 /**
@@ -1332,7 +1361,7 @@ public actual fun DoubleArray.toTypedArray(): Array<Double> {
  * Returns a *typed* object array containing all of the elements of this primitive array.
  */
 public actual fun BooleanArray.toTypedArray(): Array<Boolean> {
-    return copyOf().unsafeCast<Array<Boolean>>()
+    return js("[]").slice.call(this)
 }
 
 /**

@@ -196,15 +196,57 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     )
     var allowResultReturnType: Boolean by FreezableVar(false)
 
+    @Argument(
+        value = "-Xlist-phases",
+        description = "List backend phases"
+    )
+    var listPhases: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xdisable-phases",
+        description = "Disable backend phases"
+    )
+    var disablePhases: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xverbose-phases",
+        description = "Be verbose while performing these backend phases"
+    )
+    var verbosePhases: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-dump-before",
+        description = "Dump backend state before these phases"
+    )
+    var phasesToDumpBefore: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-dump-after",
+        description = "Dump backend state after these phases"
+    )
+    var phasesToDumpAfter: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-dump",
+        description = "Dump backend state both before and after these phases"
+    )
+    var phasesToDump: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xprofile-phases",
+        description = "Profile backend phases"
+    )
+    var profilePhases: Boolean by FreezableVar(false)
+
     open fun configureAnalysisFlags(collector: MessageCollector): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {
-            put(AnalysisFlag.skipMetadataVersionCheck, skipMetadataVersionCheck)
-            put(AnalysisFlag.multiPlatformDoNotCheckActual, noCheckActual)
-            put(AnalysisFlag.allowKotlinPackage, allowKotlinPackage)
-            put(AnalysisFlag.experimental, experimental?.toList().orEmpty())
-            put(AnalysisFlag.useExperimental, useExperimental?.toList().orEmpty())
-            put(AnalysisFlag.explicitApiVersion, apiVersion != null)
-            put(AnalysisFlag.allowResultReturnType, allowResultReturnType)
+            put(AnalysisFlags.skipMetadataVersionCheck, skipMetadataVersionCheck)
+            put(AnalysisFlags.multiPlatformDoNotCheckActual, noCheckActual)
+            put(AnalysisFlags.allowKotlinPackage, allowKotlinPackage)
+            put(AnalysisFlags.experimental, experimental?.toList().orEmpty())
+            put(AnalysisFlags.useExperimental, useExperimental?.toList().orEmpty())
+            put(AnalysisFlags.explicitApiVersion, apiVersion != null)
+            put(AnalysisFlags.allowResultReturnType, allowResultReturnType)
         }
     }
 
@@ -289,7 +331,7 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
         }
     }
 
-    fun configureLanguageVersionSettings(collector: MessageCollector): LanguageVersionSettings {
+    fun toLanguageVersionSettings(collector: MessageCollector): LanguageVersionSettings {
 
         // If only "-api-version" is specified, language version is assumed to be the latest stable
         val languageVersion = parseVersion(collector, languageVersion, "language") ?: LanguageVersion.LATEST_STABLE

@@ -6,13 +6,9 @@
 @file:kotlin.jvm.JvmMultifileClass
 @file:kotlin.jvm.JvmName("StringsKt")
 
-
 package kotlin.text
 
-import kotlin.*
-import kotlin.comparisons.*
 import kotlin.contracts.contract
-
 
 /**
  * Returns a sub sequence of this char sequence having leading and trailing characters matching the [predicate] removed.
@@ -776,6 +772,7 @@ public fun CharSequence.endsWith(suffix: CharSequence, ignoreCase: Boolean = fal
  * If this and [other] have no common prefix, returns the empty string.
 
  * @param ignoreCase `true` to ignore character case when matching a character. By default `false`.
+ * @sample samples.text.Strings.commonPrefixWith
  */
 public fun CharSequence.commonPrefixWith(other: CharSequence, ignoreCase: Boolean = false): String {
     val shortestLength = minOf(this.length, other.length)
@@ -796,6 +793,7 @@ public fun CharSequence.commonPrefixWith(other: CharSequence, ignoreCase: Boolea
  * If this and [other] have no common suffix, returns the empty string.
 
  * @param ignoreCase `true` to ignore character case when matching a character. By default `false`.
+ * @sample samples.text.Strings.commonSuffixWith
  */
 public fun CharSequence.commonSuffixWith(other: CharSequence, ignoreCase: Boolean = false): String {
     val thisLength = this.length
@@ -1266,10 +1264,14 @@ public inline fun CharSequence.split(regex: Regex, limit: Int = 0): List<String>
 
 /**
  * Splits this char sequence to a sequence of lines delimited by any of the following character sequences: CRLF, LF or CR.
+ *
+ * The lines returned do not include terminating line separators.
  */
 public fun CharSequence.lineSequence(): Sequence<String> = splitToSequence("\r\n", "\n", "\r")
 
 /**
- * * Splits this char sequence to a list of lines delimited by any of the following character sequences: CRLF, LF or CR.
+ * Splits this char sequence to a list of lines delimited by any of the following character sequences: CRLF, LF or CR.
+ *
+ * The lines returned do not include terminating line separators.
  */
 public fun CharSequence.lines(): List<String> = lineSequence().toList()

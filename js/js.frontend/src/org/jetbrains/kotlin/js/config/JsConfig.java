@@ -55,7 +55,7 @@ public class JsConfig {
 
     private final Project project;
     private final CompilerConfiguration configuration;
-    private final LockBasedStorageManager storageManager = new LockBasedStorageManager();
+    private final LockBasedStorageManager storageManager = new LockBasedStorageManager("JsConfig");
 
     private final List<KotlinJavascriptMetadata> metadata = new SmartList<>();
     private final List<KotlinJavascriptMetadata> friends = new SmartList<>();
@@ -169,10 +169,7 @@ public class JsConfig {
 
         Set<String> modules = new HashSet<>();
 
-        boolean skipMetadataVersionCheck =
-                getLanguageVersionSettings().getFlag(
-                        AnalysisFlag.getSkipMetadataVersionCheck()
-                );
+        boolean skipMetadataVersionCheck = getLanguageVersionSettings().getFlag(AnalysisFlags.getSkipMetadataVersionCheck());
 
         for (String path : libraries) {
             if (librariesToSkip != null && librariesToSkip.contains(path)) continue;
@@ -309,7 +306,7 @@ public class JsConfig {
         return factoryMap.computeIfAbsent(metadata, m -> {
             LanguageVersionSettings languageVersionSettings = CommonConfigurationKeysKt.getLanguageVersionSettings(configuration);
             assert m.getVersion().isCompatible() ||
-                   languageVersionSettings.getFlag(AnalysisFlag.getSkipMetadataVersionCheck()) :
+                   languageVersionSettings.getFlag(AnalysisFlags.getSkipMetadataVersionCheck()) :
                     "Expected JS metadata version " + JsMetadataVersion.INSTANCE + ", but actual metadata version is " + m.getVersion();
 
             ModuleDescriptorImpl moduleDescriptor = new ModuleDescriptorImpl(

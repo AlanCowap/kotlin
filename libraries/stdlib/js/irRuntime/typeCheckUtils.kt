@@ -90,12 +90,16 @@ fun isObject(obj: dynamic): Boolean {
     }
 }
 
-public fun isArray(obj: Any): Boolean {
+private fun isJsArray(obj: Any): Boolean {
     return js("Array.isArray(obj)").unsafeCast<Boolean>()
 }
 
+public fun isArray(obj: Any): Boolean {
+    return isJsArray(obj) && js("!obj.\$type\$").unsafeCast<Boolean>()
+}
+
 public fun isArrayish(o: dynamic) =
-    isArray(o) || js("ArrayBuffer.isView(o)").unsafeCast<Boolean>()
+    isJsArray(o) || js("ArrayBuffer.isView(o)").unsafeCast<Boolean>()
 
 
 public fun isChar(c: Any): Boolean {
@@ -103,14 +107,14 @@ public fun isChar(c: Any): Boolean {
 }
 
 // TODO: Distinguish Boolean/Byte and Short/Char
-public fun isBooleanArray(a: dynamic): Boolean = isArray(a) && a.asDynamic().`$type$` == "BooleanArray"
+public fun isBooleanArray(a: dynamic): Boolean = isJsArray(a) && a.`$type$` == "BooleanArray"
 public fun isByteArray(a: dynamic): Boolean = js("a instanceof Int8Array").unsafeCast<Boolean>()
 public fun isShortArray(a: dynamic): Boolean = js("a instanceof Int16Array").unsafeCast<Boolean>()
-public fun isCharArray(a: dynamic): Boolean = isArray(a) && a.asDynamic().`$type$` == "CharArray"
+public fun isCharArray(a: dynamic): Boolean = isJsArray(a) && a.`$type$` == "CharArray"
 public fun isIntArray(a: dynamic): Boolean = js("a instanceof Int32Array").unsafeCast<Boolean>()
 public fun isFloatArray(a: dynamic): Boolean = js("a instanceof Float32Array").unsafeCast<Boolean>()
 public fun isDoubleArray(a: dynamic): Boolean = js("a instanceof Float64Array").unsafeCast<Boolean>()
-public fun isLongArray(a: dynamic): Boolean = isArray(a) && a.asDynamic().`$type$` == "LongArray"
+public fun isLongArray(a: dynamic): Boolean = isJsArray(a) && a.`$type$` == "LongArray"
 
 
 internal fun jsIn(x: String, y: dynamic): Boolean = js("x in y")
@@ -151,3 +155,15 @@ public fun jsIsType(obj: dynamic, jsClass: dynamic): Boolean {
 
     return false
 }
+
+fun isNumber(a: dynamic) = jsTypeOf(a) == "number" || a is Long
+
+fun isComparable(value: dynamic): Boolean {
+    var type = jsTypeOf(value)
+
+    return type == "string" ||
+           type == "boolean" ||
+           isNumber(value) ||
+           isInterface(value, Comparable::class.js)
+}
+

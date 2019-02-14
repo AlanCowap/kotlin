@@ -6,8 +6,6 @@ plugins {
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
-
 dependencies {
     testRuntime(intellijDep())
 
@@ -42,7 +40,6 @@ dependencies {
     testCompile(intellijDep())
 
     testRuntime(project(":idea:idea-jvm"))
-    testRuntime(project(":plugins:android-extensions-jps"))
     testRuntime(project(":sam-with-receiver-ide-plugin"))
     testRuntime(project(":noarg-ide-plugin"))
     testRuntime(project(":allopen-ide-plugin"))
@@ -56,14 +53,23 @@ dependencies {
     testRuntime(intellijPluginDep("gradle"))
     testRuntime(intellijPluginDep("Groovy"))
     testRuntime(intellijPluginDep("java-decompiler"))
-    testRuntime(intellijPluginDep("maven"))
+    Ide.IJ {
+        testRuntime(intellijPluginDep("maven"))
+    }
     testRuntime(intellijPluginDep("android"))
-    testRuntime(intellijPluginDep("smali"))
+    (Platform[181].orHigher.or(Ide.AS31)) {
+        testRuntime(intellijPluginDep("smali"))
+    }
 }
 
 sourceSets {
-    "main" { projectDefault() }
-    "test" { projectDefault() }
+    if (Ide.AS33.orHigher() || Ide.IJ191.orHigher()) {
+        "main" { }
+        "test" { }
+    } else {
+        "main" { projectDefault() }
+        "test" { projectDefault() }
+    }
 }
 
 testsJar {}

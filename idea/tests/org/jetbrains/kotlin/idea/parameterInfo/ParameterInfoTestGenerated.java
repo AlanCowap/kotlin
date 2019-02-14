@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -165,6 +165,16 @@ public class ParameterInfoTestGenerated extends AbstractParameterInfoTest {
         @TestMetadata("Invoke.kt")
         public void testInvoke() throws Exception {
             runTest("idea/testData/parameterInfo/functionCall/Invoke.kt");
+        }
+
+        @TestMetadata("lambdaArgument.kt")
+        public void testLambdaArgument() throws Exception {
+            runTest("idea/testData/parameterInfo/functionCall/lambdaArgument.kt");
+        }
+
+        @TestMetadata("lambdaArgument2.kt")
+        public void testLambdaArgument2() throws Exception {
+            runTest("idea/testData/parameterInfo/functionCall/lambdaArgument2.kt");
         }
 
         @TestMetadata("LocalFunctionBug.kt")

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -97,6 +97,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
     @TestMetadata("javaForKClass.kt")
     public void testJavaForKClass() throws Exception {
         runTest("compiler/testData/diagnostics/testsWithStdLib/javaForKClass.kt");
+    }
+
+    @TestMetadata("kt8050.kt")
+    public void testKt8050() throws Exception {
+        runTest("compiler/testData/diagnostics/testsWithStdLib/kt8050.kt");
     }
 
     @TestMetadata("kt9078.kt")
@@ -599,6 +604,16 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/jvmOverloads/jvmOverloadsOnAbstractMethods.kt");
             }
 
+            @TestMetadata("jvmOverloadsOnAnnotationClassConstructor_1_3.kt")
+            public void testJvmOverloadsOnAnnotationClassConstructor_1_3() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/jvmOverloads/jvmOverloadsOnAnnotationClassConstructor_1_3.kt");
+            }
+
+            @TestMetadata("jvmOverloadsOnAnnotationClassConstructor_1_4.kt")
+            public void testJvmOverloadsOnAnnotationClassConstructor_1_4() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/jvmOverloads/jvmOverloadsOnAnnotationClassConstructor_1_4.kt");
+            }
+
             @TestMetadata("jvmOverloadsOnPrivate.kt")
             public void testJvmOverloadsOnPrivate() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/jvmOverloads/jvmOverloadsOnPrivate.kt");
@@ -966,6 +981,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                     runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/controlflow/flowInlining/nonReturningInlinedLambda.kt");
                 }
 
+                @TestMetadata("safeCallAndInPlaceReturn.kt")
+                public void testSafeCallAndInPlaceReturn() throws Exception {
+                    runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/controlflow/flowInlining/safeCallAndInPlaceReturn.kt");
+                }
+
                 @TestMetadata("severalJumpOutsFromInlinedLambda.kt")
                 public void testSeveralJumpOutsFromInlinedLambda() throws Exception {
                     runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/controlflow/flowInlining/severalJumpOutsFromInlinedLambda.kt");
@@ -1110,6 +1130,16 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
 
             public void testAllFilesPresentInDsl() throws Exception {
                 KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithStdLib/contracts/dsl"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("callUsualContractFunction.kt")
+            public void testCallUsualContractFunction() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/dsl/callUsualContractFunction.kt");
+            }
+
+            @TestMetadata("rewriteAtSliceFunctor.kt")
+            public void testRewriteAtSliceFunctor() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/dsl/rewriteAtSliceFunctor.kt");
             }
 
             @TestMetadata("useBeforeDeclaration.kt")
@@ -1266,6 +1296,16 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/deeplyNested.kt");
             }
 
+            @TestMetadata("extensionReceiver.kt")
+            public void testExtensionReceiver() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/extensionReceiver.kt");
+            }
+
+            @TestMetadata("extensionReceiver_after.kt")
+            public void testExtensionReceiver_after() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/extensionReceiver_after.kt");
+            }
+
             @TestMetadata("intersectingInfo.kt")
             public void testIntersectingInfo() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/intersectingInfo.kt");
@@ -1309,6 +1349,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             @TestMetadata("unreachableBranches.kt")
             public void testUnreachableBranches() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/unreachableBranches.kt");
+            }
+
+            @TestMetadata("valueOfContractedFunctionIngored.kt")
+            public void testValueOfContractedFunctionIngored() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/valueOfContractedFunctionIngored.kt");
             }
 
             @TestMetadata("compiler/testData/diagnostics/testsWithStdLib/contracts/smartcasts/multieffect")
@@ -1658,6 +1703,16 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/suspendTest.kt");
         }
 
+        @TestMetadata("suspensionPointInMonitor.kt")
+        public void testSuspensionPointInMonitor() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/suspensionPointInMonitor.kt");
+        }
+
+        @TestMetadata("suspensionPointInMonitorNewInf.kt")
+        public void testSuspensionPointInMonitorNewInf() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/suspensionPointInMonitorNewInf.kt");
+        }
+
         @TestMetadata("suspesionInDefaultValue.kt")
         public void testSuspesionInDefaultValue() throws Exception {
             runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/suspesionInDefaultValue.kt");
@@ -1747,6 +1802,21 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/extensionSuspend.kt");
             }
 
+            @TestMetadata("extensionWithNonValuableConstraints.kt")
+            public void testExtensionWithNonValuableConstraints() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/extensionWithNonValuableConstraints.kt");
+            }
+
+            @TestMetadata("extensionsWithNonValuableConstraintsGenericBase.kt")
+            public void testExtensionsWithNonValuableConstraintsGenericBase() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/extensionsWithNonValuableConstraintsGenericBase.kt");
+            }
+
+            @TestMetadata("extensionsWithNonValuableConstraints_1_2.kt")
+            public void testExtensionsWithNonValuableConstraints_1_2() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/extensionsWithNonValuableConstraints_1_2.kt");
+            }
+
             @TestMetadata("incorrectCalls.kt")
             public void testIncorrectCalls() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/incorrectCalls.kt");
@@ -1760,6 +1830,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             @TestMetadata("kt15516.kt")
             public void testKt15516() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/kt15516.kt");
+            }
+
+            @TestMetadata("nestedLambdaInferenceWithListMap.kt")
+            public void testNestedLambdaInferenceWithListMap() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/nestedLambdaInferenceWithListMap.kt");
             }
 
             @TestMetadata("nestedSuspendCallInsideLambda.kt")
@@ -2049,14 +2124,14 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTestWithPackageReplacement("compiler/testData/diagnostics/testsWithStdLib/coroutines/restrictSuspension/notRelatedFun.kt", "kotlin.coroutines");
             }
 
-            @TestMetadata("outerYield.kt")
+            @TestMetadata("outerYield_1_2.kt")
             public void testOuterYield_1_2() throws Exception {
-                runTestWithPackageReplacement("compiler/testData/diagnostics/testsWithStdLib/coroutines/restrictSuspension/outerYield.kt", "kotlin.coroutines.experimental");
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/restrictSuspension/outerYield_1_2.kt");
             }
 
-            @TestMetadata("outerYield.kt")
+            @TestMetadata("outerYield_1_3.kt")
             public void testOuterYield_1_3() throws Exception {
-                runTestWithPackageReplacement("compiler/testData/diagnostics/testsWithStdLib/coroutines/restrictSuspension/outerYield.kt", "kotlin.coroutines");
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/restrictSuspension/outerYield_1_3.kt");
             }
 
             @TestMetadata("sameInstance.kt")
@@ -2407,6 +2482,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             runTest("compiler/testData/diagnostics/testsWithStdLib/experimental/experimentalUnsignedLiterals.kt");
         }
 
+        @TestMetadata("fullFqNameUsage.kt")
+        public void testFullFqNameUsage() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/experimental/fullFqNameUsage.kt");
+        }
+
         @TestMetadata("importStatement.kt")
         public void testImportStatement() throws Exception {
             runTest("compiler/testData/diagnostics/testsWithStdLib/experimental/importStatement.kt");
@@ -2430,11 +2510,6 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
         @TestMetadata("overrideDifferentExperimentalities.kt")
         public void testOverrideDifferentExperimentalities() throws Exception {
             runTest("compiler/testData/diagnostics/testsWithStdLib/experimental/overrideDifferentExperimentalities.kt");
-        }
-
-        @TestMetadata("scripts.kt")
-        public void testScripts() throws Exception {
-            runTest("compiler/testData/diagnostics/testsWithStdLib/experimental/scripts.kt");
         }
 
         @TestMetadata("topLevel.kt")
@@ -2658,6 +2733,16 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
 
         public void testAllFilesPresentInJava() throws Exception {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithStdLib/java"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("concurrentHashMapContains.kt")
+        public void testConcurrentHashMapContains() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/java/concurrentHashMapContains.kt");
+        }
+
+        @TestMetadata("concurrentHashMapContainsError.kt")
+        public void testConcurrentHashMapContainsError() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/java/concurrentHashMapContainsError.kt");
         }
 
         @TestMetadata("functionN.kt")

@@ -13,20 +13,60 @@ import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElementVisitor
-import org.jetbrains.kotlin.psi.KtFunctionLiteral
-import org.jetbrains.kotlin.psi.lambdaExpressionVisitor
+import org.jetbrains.kotlin.KtNodeTypes
+import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
+import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.anyDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
+import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
 import org.jetbrains.kotlin.resolve.calls.util.isSingleUnderscore
+import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 
 class RedundantLambdaArrowInspection : AbstractKotlinInspection() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
-        return lambdaExpressionVisitor { lambdaExpression ->
+        return lambdaExpressionVisitor(fun(lambdaExpression: KtLambdaExpression) {
             val functionLiteral = lambdaExpression.functionLiteral
-            val arrow = functionLiteral.arrow ?: return@lambdaExpressionVisitor
+            val arrow = functionLiteral.arrow ?: return
             val parameters = functionLiteral.valueParameters
             val singleParameter = parameters.singleOrNull()
-            if (parameters.isNotEmpty() && singleParameter?.isSingleUnderscore != true) return@lambdaExpressionVisitor
+            if (parameters.isNotEmpty() && singleParameter?.isSingleUnderscore != true && singleParameter?.name != "it") {
+                return
+            }
+
+            if (lambdaExpression.getStrictParentOfType<KtWhenEntry>()?.expression == lambdaExpression) return
+            if (lambdaExpression.getStrictParentOfType<KtContainerNodeForControlStructureBody>()?.let {
+                    it.node.elementType in listOf(KtNodeTypes.THEN, KtNodeTypes.ELSE) && it.expression == lambdaExpression
+                } == true) return
+
+            val callExpression = lambdaExpression.parent?.parent as? KtCallExpression
+            if (callExpression != null) {
+                val callee = callExpression.calleeExpression as? KtNameReferenceExpression
+                if (callee != null && callee.getReferencedName() == "forEach" && singleParameter?.name != "it") return
+            }
+
+            if (parameters.isNotEmpty()) {
+                val context = lambdaExpression.analyze()
+                if (context[BindingContext.EXPECTED_EXPRESSION_TYPE, lambdaExpression] == null) return
+            }
+
+            val valueArgument = lambdaExpression.parent as? KtValueArgument
+            val valueArgumentCall = valueArgument?.getStrictParentOfType<KtCallExpression>()
+            if (valueArgumentCall != null) {
+                val argumentMatch = valueArgumentCall.resolveToCall()?.getArgumentMapping(valueArgument) as? ArgumentMatch
+                if (argumentMatch?.valueParameter?.original?.type?.isTypeParameter() == true) return
+            }
+
+            val functionLiteralDescriptor = functionLiteral.descriptor
+            if (functionLiteralDescriptor != null) {
+                if (functionLiteral.anyDescendantOfType<KtNameReferenceExpression> {
+                        it.text == "it" && it.resolveToCall()?.resultingDescriptor?.containingDeclaration != functionLiteralDescriptor
+                    }) return
+            }
 
             val startOffset = functionLiteral.startOffset
             holder.registerProblem(
@@ -39,7 +79,7 @@ class RedundantLambdaArrowInspection : AbstractKotlinInspection() {
                     DeleteFix()
                 )
             )
-        }
+        })
     }
 
     class DeleteFix : LocalQuickFix {

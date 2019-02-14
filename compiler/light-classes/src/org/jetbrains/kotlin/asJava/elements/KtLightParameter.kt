@@ -25,7 +25,7 @@ import org.jetbrains.kotlin.psi.psiUtil.isExtensionDeclaration
 class KtLightParameter(
         override val clsDelegate: PsiParameter,
         private val index: Int,
-        val method: KtLightMethod
+        method: KtLightMethod
 ) : LightParameter(clsDelegate.name ?: "p$index", clsDelegate.type, method, KotlinLanguage.INSTANCE),
         KtLightDeclaration<KtParameter, PsiParameter> {
 
@@ -41,7 +41,7 @@ class KtLightParameter(
             if (jetIndex < 0) return null
 
             if (declaration is KtFunction) {
-                val paramList = declaration.valueParameters
+                val paramList = method.lightMemberOrigin?.parametersForJvmOverloads ?: declaration.valueParameters
                 return if (jetIndex < paramList.size) paramList[jetIndex] else null
             }
 

@@ -20,6 +20,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.impl.ZipHandler
 import com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem
+import org.jetbrains.kotlin.build.DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS
 import org.jetbrains.kotlin.build.JvmSourceRoot
 import org.jetbrains.kotlin.cli.common.CLICompiler
 import org.jetbrains.kotlin.cli.common.ExitCode
@@ -40,10 +41,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.daemon.common.*
-import org.jetbrains.kotlin.daemon.report.CompileServicesFacadeMessageCollector
-import org.jetbrains.kotlin.daemon.report.DaemonMessageReporter
-import org.jetbrains.kotlin.daemon.report.DaemonMessageReporterPrintStreamAdapter
-import org.jetbrains.kotlin.daemon.report.RemoteICReporter
+import org.jetbrains.kotlin.daemon.report.*
 import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
@@ -500,7 +498,7 @@ class CompileServiceImpl(
         }
         args.freeArgs = freeArgsWithoutKotlinFiles
 
-        val reporter = RemoteICReporter(servicesFacade, compilationResults, incrementalCompilationOptions)
+        val reporter = getICReporter(servicesFacade, compilationResults, incrementalCompilationOptions)
 
         val changedFiles = if (incrementalCompilationOptions.areFileChangesKnown) {
             ChangedFiles.Known(incrementalCompilationOptions.modifiedFiles!!, incrementalCompilationOptions.deletedFiles!!)
@@ -509,22 +507,19 @@ class CompileServiceImpl(
         }
 
         val workingDir = incrementalCompilationOptions.workingDir
-        val versionManagers = commonCacheVersionsManagers(workingDir, enabled = true) +
-                customCacheVersionManager(
-                    incrementalCompilationOptions.customCacheVersion,
-                    incrementalCompilationOptions.customCacheVersionFileName,
-                    workingDir,
-                    enabled = true
-                )
         val modulesApiHistory = ModulesApiHistoryJs(incrementalCompilationOptions.modulesInfo)
+
         val compiler = IncrementalJsCompilerRunner(
             workingDir = workingDir,
-            cachesVersionManagers = versionManagers,
             reporter = reporter,
             buildHistoryFile = incrementalCompilationOptions.multiModuleICSettings.buildHistoryFile,
             modulesApiHistory = modulesApiHistory
         )
-        return compiler.compile(allKotlinFiles, args, compilerMessageCollector, changedFiles)
+        return try {
+            compiler.compile(allKotlinFiles, args, compilerMessageCollector, changedFiles)
+        } finally {
+            reporter.flush()
+        }
     }
 
     private fun execIncrementalCompiler(
@@ -535,8 +530,6 @@ class CompileServiceImpl(
         compilerMessageCollector: MessageCollector,
         daemonMessageReporter: DaemonMessageReporter
     ): ExitCode {
-        val reporter = RemoteICReporter(servicesFacade, compilationResults, incrementalCompilationOptions)
-
         val moduleFile = k2jvmArgs.buildFile?.let(::File)
         assert(moduleFile?.exists() ?: false) { "Module does not exist ${k2jvmArgs.buildFile}" }
 
@@ -559,6 +552,13 @@ class CompileServiceImpl(
         k2jvmArgs.commonSources = parsedModule.modules.flatMap { it.getCommonSourceFiles() }.toTypedArray().takeUnless { it.isEmpty() }
 
         val allKotlinFiles = parsedModule.modules.flatMap { it.getSourceFiles().map(::File) }
+        val allKotlinExtensions = (
+                DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS +
+                        allKotlinFiles.asSequence()
+                            .map { it.extension }
+                            .filter { !it.equals("java", ignoreCase = true) }
+                            .asIterable()
+                ).distinct()
         k2jvmArgs.friendPaths = parsedModule.modules.flatMap(Module::getFriendPaths).toTypedArray()
 
         val changedFiles = if (incrementalCompilationOptions.areFileChangesKnown) {
@@ -568,15 +568,11 @@ class CompileServiceImpl(
         }
 
         val workingDir = incrementalCompilationOptions.workingDir
-        val versions = commonCacheVersionsManagers(workingDir, enabled = true) +
-                customCacheVersionManager(
-                    incrementalCompilationOptions.customCacheVersion,
-                    incrementalCompilationOptions.customCacheVersionFileName,
-                    workingDir,
-                    enabled = true
-                )
 
+        val reporter = getICReporter(servicesFacade, compilationResults, incrementalCompilationOptions)
         val modulesApiHistory = incrementalCompilationOptions.run {
+            reporter.report { "Use module detection: ${multiModuleICSettings.useModuleDetection}" }
+
             if (!multiModuleICSettings.useModuleDetection) {
                 ModulesApiHistoryJvm(modulesInfo)
             } else {
@@ -587,14 +583,18 @@ class CompileServiceImpl(
         val compiler = IncrementalJvmCompilerRunner(
             workingDir,
             javaSourceRoots,
-            versions,
             reporter,
             buildHistoryFile = incrementalCompilationOptions.multiModuleICSettings.buildHistoryFile,
-            localStateDirs = incrementalCompilationOptions.localStateDirs,
+            outputFiles = incrementalCompilationOptions.outputFiles,
             usePreciseJavaTracking = incrementalCompilationOptions.usePreciseJavaTracking,
-            modulesApiHistory = modulesApiHistory
+            modulesApiHistory = modulesApiHistory,
+            kotlinSourceFilesExtensions = allKotlinExtensions
         )
-        return compiler.compile(allKotlinFiles, k2jvmArgs, compilerMessageCollector, changedFiles)
+        return try {
+            compiler.compile(allKotlinFiles, k2jvmArgs, compilerMessageCollector, changedFiles)
+        } finally {
+            reporter.flush()
+        }
     }
 
     override fun leaseReplSession(

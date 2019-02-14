@@ -5,8 +5,8 @@
 
 package org.jetbrains.kotlin.idea.configuration
 
-import com.intellij.openapi.module.Module
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.kotlin.konan.target.presetName
 import java.io.BufferedWriter
 
 class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultiplatformModuleBuilder() {
@@ -14,7 +14,7 @@ class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultipl
     private val commonName: String = "common"
     private var jvmTargetName: String = "jvm"
     private var jsTargetName: String = "js"
-    private var nativeTargetName: String = "ios"
+    private var nativeTargetName: String = defaultNativeTarget.userTargetName
 
     private val commonSourceName get() = "$commonName$productionSuffix"
     private val commonTestName get() = "$commonName$testSuffix"
@@ -23,26 +23,28 @@ class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultipl
     private val jsSourceName get() = "$jsTargetName$productionSuffix"
     private val jsTestName get() = "$jsTargetName$testSuffix"
     private val nativeSourceName get() = "$nativeTargetName$productionSuffix"
-    private val nativeTestName get() = "$nativeTargetName$testSuffix"
+    val nativeTestName get() = "$nativeTargetName$testSuffix"
+
+    override val shouldEnableGradleMetadataPreview: Boolean = true
 
     override fun getBuilderId() = "kotlin.gradle.multiplatform.shared"
 
     override fun getPresentableName() = "Kotlin (Multiplatform Library)"
 
     override fun getDescription() =
-        "Multiplatform Gradle projects allow sharing the same Kotlin code between all three main platforms (JVM, JS, iOS)."
+        "Multiplatform Gradle projects allow sharing the same Kotlin code between all three main platforms (JVM, JS, Native)."
 
-    override fun createProjectSkeleton(module: Module, rootDir: VirtualFile) {
+    override fun createProjectSkeleton(rootDir: VirtualFile) {
         val src = rootDir.createChildDirectory(this, "src")
 
         val commonMain = src.createKotlinSampleFileWriter(commonSourceName)
         val commonTest = src.createKotlinSampleFileWriter(commonTestName, fileName = "SampleTests.kt")
-        val jvmMain = src.createKotlinSampleFileWriter(jvmSourceName)
+        val jvmMain = src.createKotlinSampleFileWriter(jvmSourceName, jvmTargetName)
         val jvmTest = src.createKotlinSampleFileWriter(jvmTestName, fileName = "SampleTestsJVM.kt")
-        val jsMain = src.createKotlinSampleFileWriter(jsSourceName)
+        val jsMain = src.createKotlinSampleFileWriter(jsSourceName, jsTargetName)
         val jsTest = src.createKotlinSampleFileWriter(jsTestName, fileName = "SampleTestsJS.kt")
-        val nativeMain = src.createKotlinSampleFileWriter(nativeSourceName)
-        val nativeTest = src.createKotlinSampleFileWriter(nativeTestName, fileName = "SampleTestsIOS.kt")
+        val nativeMain = src.createKotlinSampleFileWriter(nativeSourceName, nativeTargetName)
+        val nativeTest = src.createKotlinSampleFileWriter(nativeTestName, fileName = "SampleTestsNative.kt")
 
         try {
             commonMain.write(
@@ -98,7 +100,7 @@ class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultipl
                 }
 
                 actual object Platform {
-                    actual val name: String = "iOS"
+                    actual val name: String = "Native"
                 }
             """.trimIndent()
             )
@@ -158,10 +160,10 @@ class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultipl
                 import kotlin.test.Test
                 import kotlin.test.assertTrue
 
-                class SampleTestsIOS {
+                class SampleTestsNative {
                     @Test
                     fun testHello() {
-                        assertTrue("iOS" in hello())
+                        assertTrue("Native" in hello())
                     }
                 }
             """.trimIndent()
@@ -173,46 +175,50 @@ class KotlinGradleSharedMultiplatformModuleBuilder : KotlinGradleAbstractMultipl
 
     override fun buildMultiPlatformPart(): String {
         return """
+            group 'com.example'
+            version '0.0.1'
+
+            apply plugin: 'maven-publish'
+
             kotlin {
-                targets {
-                    fromPreset(presets.jvm, '$jvmTargetName')
-                    fromPreset(presets.js, '$jsTargetName')
-                    // For ARM, preset should be changed to presets.iosArm32 or presets.iosArm64
-                    // For Linux, preset should be changed to e.g. presets.linuxX64
-                    // For MacOS, preset should be changed to e.g. presets.macosX64
-                    fromPreset(presets.iosX64, '$nativeTargetName')
-                }
+                jvm()
+                js()
+                // For ARM, should be changed to iosArm32 or iosArm64
+                // For Linux, should be changed to e.g. linuxX64
+                // For MacOS, should be changed to e.g. macosX64
+                // For Windows, should be changed to e.g. mingwX64
+                ${defaultNativeTarget.presetName}("${defaultNativeTarget.userTargetName}")
                 sourceSets {
                     $commonSourceName {
                         dependencies {
-                            implementation 'org.jetbrains.kotlin:kotlin-stdlib-common'
+                            implementation kotlin('stdlib-common')
                         }
                     }
                     $commonTestName {
                         dependencies {
-                    		implementation 'org.jetbrains.kotlin:kotlin-test-common'
-                    		implementation 'org.jetbrains.kotlin:kotlin-test-annotations-common'
+                            implementation kotlin('test-common')
+                            implementation kotlin('test-annotations-common')
                         }
                     }
                     $jvmSourceName {
                         dependencies {
-                            implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+                            implementation kotlin('stdlib-jdk8')
                         }
                     }
                     $jvmTestName {
                         dependencies {
-                            implementation 'org.jetbrains.kotlin:kotlin-test'
-                            implementation 'org.jetbrains.kotlin:kotlin-test-junit'
+                            implementation kotlin('test')
+                            implementation kotlin('test-junit')
                         }
                     }
                     $jsSourceName {
                         dependencies {
-                            implementation 'org.jetbrains.kotlin:kotlin-stdlib-js'
+                            implementation kotlin('stdlib-js')
                         }
                     }
                     $jsTestName {
                         dependencies {
-                            implementation 'org.jetbrains.kotlin:kotlin-test-js'
+                            implementation kotlin('test-js')
                         }
                     }
                     $nativeSourceName {

@@ -121,7 +121,7 @@ object ProjectRootsUtil {
         if (!includeLibraryClasses && !includeLibrarySource) return false
 
         // NOTE: the following is a workaround for cases when class files are under library source roots and source files are under class roots
-        val fileType = FileTypeManager.getInstance().getFileTypeByFileName(file.name)
+        val fileType = FileTypeManager.getInstance().getFileTypeByFileName(file.nameSequence)
         val canContainClassFiles = fileType == ArchiveFileType.INSTANCE || file.isDirectory
         val isBinary = fileType.isKotlinBinary()
 
@@ -133,7 +133,11 @@ object ProjectRootsUtil {
         }
         if (includeLibrarySource && !isBinary) {
             if (fileIndex.isInLibrarySource(file)) return true
-            if (scriptConfigurationManager?.getAllLibrarySourcesScope()?.contains(file) == true) return true
+            if (scriptConfigurationManager?.getAllLibrarySourcesScope()?.contains(file) == true &&
+                !fileIndex.isInSourceContentWithoutInjected(file)
+            ) {
+                return true
+            }
         }
 
         return false
@@ -166,6 +170,7 @@ object ProjectRootsUtil {
         }
     }
 
+    @JvmOverloads
     @JvmStatic
     fun isInProjectSource(element: PsiElement, includeScriptsOutsideSourceRoots: Boolean = false): Boolean {
         return isInContent(
@@ -178,6 +183,7 @@ object ProjectRootsUtil {
         )
     }
 
+    @JvmOverloads
     @JvmStatic
     fun isProjectSourceFile(project: Project, file: VirtualFile, includeScriptsOutsideSourceRoots: Boolean = false): Boolean {
         return isInContent(
@@ -191,6 +197,7 @@ object ProjectRootsUtil {
         )
     }
 
+    @JvmOverloads
     @JvmStatic
     fun isInProjectOrLibSource(element: PsiElement, includeScriptsOutsideSourceRoots: Boolean = false): Boolean {
         return isInContent(

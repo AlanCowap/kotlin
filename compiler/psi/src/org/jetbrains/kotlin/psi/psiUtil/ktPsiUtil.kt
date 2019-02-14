@@ -35,7 +35,6 @@ import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.stubs.KotlinClassOrObjectStub
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
-import java.lang.IllegalArgumentException
 import java.util.*
 
 // NOTE: in this file we collect only Kotlin-specific methods working with PSI and not modifying it
@@ -165,15 +164,15 @@ fun KtElement.blockExpressionsOrSingle(): Sequence<KtElement> =
 fun KtExpression.lastBlockStatementOrThis(): KtExpression = (this as? KtBlockExpression)?.statements?.lastOrNull() ?: this
 
 fun KtBlockExpression.contentRange(): PsiChildRange {
-    val first = (lBrace?.nextSibling ?: firstChild)
-        ?.siblings(withItself = false)
-        ?.firstOrNull { it !is PsiWhiteSpace }
-    val rBrace = rBrace
+    val lBrace = this.lBrace ?: return PsiChildRange.EMPTY
+    val rBrace = this.rBrace ?: return PsiChildRange.EMPTY
+
+    val first = lBrace.siblings(withItself = false).firstOrNull { it !is PsiWhiteSpace }
     if (first == rBrace) return PsiChildRange.EMPTY
-    val last = rBrace!!
-        .siblings(forward = false, withItself = false)
-        .first { it !is PsiWhiteSpace }
+
+    val last = rBrace.siblings(forward = false, withItself = false).first { it !is PsiWhiteSpace }
     if (last == lBrace) return PsiChildRange.EMPTY
+
     return PsiChildRange(first, last)
 }
 
@@ -293,14 +292,14 @@ inline fun <reified T : KtElement, R> flatMapDescendantsOfTypeVisitor(
 
 // ----------- Contracts -------------------------------------------------------------------------------------------------------------------
 
-fun KtElement.isContractPresentPsiCheck(): Boolean {
-    val contractAllowedHere = this is KtNamedFunction &&
-            isTopLevel &&
-            hasBlockBody() &&
-            !hasModifier(KtTokens.OPERATOR_KEYWORD)
+fun KtNamedFunction.isContractPresentPsiCheck(): Boolean {
+    val contractAllowedHere =
+        isTopLevel &&
+        hasBlockBody() &&
+        !hasModifier(KtTokens.OPERATOR_KEYWORD)
     if (!contractAllowedHere) return false
 
-    val firstExpression = ((this as? KtFunction)?.bodyExpression as? KtBlockExpression)?.statements?.firstOrNull() ?: return false
+    val firstExpression = (this as? KtFunction)?.bodyBlockExpression?.statements?.firstOrNull() ?: return false
 
     return firstExpression.isContractDescriptionCallPsiCheck()
 }
@@ -454,6 +453,8 @@ fun KtModifierListOwner.visibilityModifierType(): KtModifierKeywordToken? =
 fun KtModifierListOwner.visibilityModifierTypeOrDefault(): KtModifierKeywordToken = visibilityModifierType() ?: KtTokens.DEFAULT_VISIBILITY_KEYWORD
 
 fun KtDeclaration.modalityModifier() = modifierFromTokenSet(MODALITY_MODIFIERS)
+
+fun KtDeclaration.modalityModifierType(): KtModifierKeywordToken? = modalityModifier()?.node?.elementType as KtModifierKeywordToken?
 
 fun KtStringTemplateExpression.isPlain() = entries.all { it is KtLiteralStringTemplateEntry }
 fun KtStringTemplateExpression.isPlainWithEscapes() =

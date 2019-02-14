@@ -97,13 +97,23 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
         fun isCallableType(type: KotlinType): Boolean =
             type.isFunctionTypeOrSubtype || type.isSuspendFunctionTypeOrSubtype || isKCallableType(type)
 
+        fun isBaseTypeForNumberedReferenceTypes(type: KotlinType): Boolean =
+            ReflectionTypes.hasKPropertyTypeFqName(type) ||
+                    ReflectionTypes.hasKMutablePropertyTypeFqName(type) ||
+                    ReflectionTypes.hasKCallableTypeFqName(type)
+
         @JvmStatic
         fun isNumberedKPropertyOrKMutablePropertyType(type: KotlinType): Boolean =
                 isNumberedKPropertyType(type) || isNumberedKMutablePropertyType(type)
 
         private fun isKCallableType(type: KotlinType): Boolean =
-                hasFqName(type.constructor, KotlinBuiltIns.FQ_NAMES.kCallable) ||
-                type.constructor.supertypes.any { isKCallableType(it) }
+            hasKCallableTypeFqName(type) || type.constructor.supertypes.any { isKCallableType(it) }
+
+        fun hasKCallableTypeFqName(type: KotlinType): Boolean =
+            hasFqName(type.constructor, KotlinBuiltIns.FQ_NAMES.kCallable)
+
+        fun hasKMutablePropertyTypeFqName(type: KotlinType): Boolean =
+            hasFqName(type.constructor, KotlinBuiltIns.FQ_NAMES.kMutablePropertyFqName)
 
         fun isNumberedKMutablePropertyType(type: KotlinType): Boolean {
             val descriptor = type.constructor.declarationDescriptor as? ClassDescriptor ?: return false
@@ -111,6 +121,9 @@ class ReflectionTypes(module: ModuleDescriptor, private val notFoundClasses: Not
                    hasFqName(descriptor, KotlinBuiltIns.FQ_NAMES.kMutableProperty1) ||
                    hasFqName(descriptor, KotlinBuiltIns.FQ_NAMES.kMutableProperty2)
         }
+
+        fun hasKPropertyTypeFqName(type: KotlinType): Boolean =
+            hasFqName(type.constructor, KotlinBuiltIns.FQ_NAMES.kPropertyFqName)
 
         fun isNumberedKPropertyType(type: KotlinType): Boolean {
             val descriptor = type.constructor.declarationDescriptor as? ClassDescriptor ?: return false

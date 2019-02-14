@@ -24,6 +24,8 @@ import com.intellij.openapi.externalSystem.model.settings.ExternalSystemExecutio
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings
 import com.intellij.openapi.externalSystem.settings.ExternalSystemSettingsListenerAdapter
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.projectRoots.ProjectJdkTable
@@ -34,6 +36,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.IdeaTestUtil
+import com.intellij.testFramework.TestLoggerFactory
 import com.intellij.util.PathUtil
 import com.intellij.util.containers.ContainerUtil
 import junit.framework.TestCase
@@ -41,13 +44,16 @@ import org.gradle.util.GradleVersion
 import org.gradle.wrapper.GradleWrapperMain
 import org.intellij.lang.annotations.Language
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.gradle.KotlinSdkCreationChecker
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
+import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import org.jetbrains.plugins.groovy.GroovyFileType
 import org.junit.Assume.assumeThat
+import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.rules.TestName
 import org.junit.runner.RunWith
@@ -57,14 +63,22 @@ import java.io.IOException
 import java.io.StringWriter
 import java.net.URISyntaxException
 import java.util.*
+import com.intellij.openapi.diagnostic.Logger
+import org.junit.AfterClass
 
 // part of org.jetbrains.plugins.gradle.importing.GradleImportingTestCase
 @RunWith(value = Parameterized::class)
 abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
 
+    protected var sdkCreationChecker : KotlinSdkCreationChecker? = null
+
     @JvmField
     @Rule
     var name = TestName()
+
+    @JvmField
+    @Rule
+    var testWatcher = ImportingTestWatcher()
 
     @JvmField
     @Rule
@@ -92,10 +106,13 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
             FileTypeManager.getInstance().associateExtension(GroovyFileType.GROOVY_FILE_TYPE, "gradle")
 
         }
-        myProjectSettings = GradleProjectSettings()
+        myProjectSettings = GradleProjectSettings().apply {
+            this.isUseQualifiedModuleNames = false
+        }
         GradleSettings.getInstance(myProject).gradleVmOptions = "-Xmx128m -XX:MaxPermSize=64m"
         System.setProperty(ExternalSystemExecutionSettings.REMOTE_PROCESS_IDLE_TTL_IN_MS_KEY, GRADLE_DAEMON_TTL_MS.toString())
         configureWrapper()
+        sdkCreationChecker = KotlinSdkCreationChecker()
     }
 
     override fun tearDown() {
@@ -109,6 +126,7 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
 
             Messages.setTestDialog(TestDialog.DEFAULT)
             FileUtil.delete(BuildManager.getInstance().buildSystemDirectory.toFile())
+            sdkCreationChecker?.removeNewKotlinSdk()
         } finally {
             super.tearDown()
         }
@@ -215,6 +233,33 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
         }.toList()
     }
 
+    protected fun importProjectFromTestData(): List<VirtualFile> {
+        val files = configureByFiles()
+        importProject()
+        return files
+    }
+
+    protected fun checkFiles(files: List<VirtualFile>) {
+        FileDocumentManager.getInstance().saveAllDocuments()
+
+        files.filter {
+            it.name == GradleConstants.DEFAULT_SCRIPT_NAME
+                    || it.name == GradleConstants.KOTLIN_DSL_SCRIPT_NAME
+                    || it.name == GradleConstants.SETTINGS_FILE_NAME
+        }
+            .forEach {
+                if (it.name == GradleConstants.SETTINGS_FILE_NAME && !File(testDataDirectory(), it.name + SUFFIX).exists()) return@forEach
+                val actualText = LoadTextUtil.loadText(it).toString()
+                val expectedFileName = if (File(testDataDirectory(), it.name + ".$gradleVersion" + SUFFIX).exists()) {
+                    it.name + ".$gradleVersion" + SUFFIX
+                } else {
+                    it.name + SUFFIX
+                }
+                KotlinTestUtils.assertEqualsToFile(File(testDataDirectory(), expectedFileName), actualText)
+            }
+    }
+
+
     private fun runWrite(f: () -> Unit) {
         object : WriteAction<Any>() {
             override fun run(result: Result<Any>) {
@@ -224,7 +269,7 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
     }
 
     companion object {
-        private const val GRADLE_JDK_NAME = "Gradle JDK"
+        const val GRADLE_JDK_NAME = "Gradle JDK"
         private const val GRADLE_DAEMON_TTL_MS = 10000
 
         @JvmStatic
@@ -236,8 +281,25 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
             return Arrays.asList(*AbstractModelBuilderTest.SUPPORTED_GRADLE_VERSIONS)
         }
 
-        private fun wrapperJar(): File {
+        fun wrapperJar(): File {
             return File(PathUtil.getJarPathForClass(GradleWrapperMain::class.java))
+        }
+
+        private var persistedLoggerFactory : Logger.Factory? = null
+
+        @JvmStatic
+        @BeforeClass
+        fun setLoggerFactory() {
+            persistedLoggerFactory = Logger.getFactory()
+            Logger.setFactory(TestLoggerFactory::class.java)
+        }
+
+        @JvmStatic
+        @AfterClass
+        fun restoreLoggerFactory() {
+            if (persistedLoggerFactory != null) {
+                Logger.setFactory(persistedLoggerFactory)
+            }
         }
     }
 }

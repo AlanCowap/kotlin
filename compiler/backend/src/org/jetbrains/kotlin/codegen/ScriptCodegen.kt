@@ -49,7 +49,7 @@ class ScriptCodegen private constructor(
                 typeMapper.mapSupertype(scriptDescriptor.getSuperClassOrAny().defaultType, null).internalName,
                 mapSupertypesNames(typeMapper, scriptDescriptor.getSuperInterfaces(), null)
         )
-        AnnotationCodegen.forClass(v.visitor, this, typeMapper).genAnnotations(scriptDescriptor, null)
+        AnnotationCodegen.forClass(v.visitor, this, state).genAnnotations(scriptDescriptor, null)
     }
 
     override fun generateBody() {
@@ -77,8 +77,6 @@ class ScriptCodegen private constructor(
             classBuilder: ClassBuilder,
             methodContext: MethodContext
     ) {
-        val scriptDefinition = scriptContext.script.kotlinScriptDefinition.value
-
         val jvmSignature = typeMapper.mapScriptSignature(
             scriptDescriptor,
             scriptContext.earlierScripts
@@ -99,9 +97,7 @@ class ScriptCodegen private constructor(
                 OtherOrigin(scriptDeclaration, scriptDescriptor.unsubstitutedPrimaryConstructor),
                 ACC_PUBLIC, jvmSignature.asmMethod.name, jvmSignature.asmMethod.descriptor, null, null)
 
-        AnnotationCodegen.forMethod(mv, this, typeMapper).genAnnotations(
-            scriptDescriptor.unsubstitutedPrimaryConstructor, asmMethod.returnType
-        )
+        AnnotationCodegen.forMethod(mv, this, state).genAnnotations(scriptDescriptor.unsubstitutedPrimaryConstructor, asmMethod.returnType)
 
         if (state.classBuilderMode.generateBodies) {
             mv.visitCode()
@@ -172,10 +168,10 @@ class ScriptCodegen private constructor(
                 genFieldFromParam(typeMapper.mapClass(receiver), receiversParamIndex, name)
             }
 
-            scriptDescriptor.scriptEnvironmentProperties.forEachIndexed { envVarIndex, envVar ->
+            scriptDescriptor.scriptProvidedProperties.forEachIndexed { envVarIndex, envVar ->
                 val fieldClassType = typeMapper.mapType(envVar)
                 val envVarParamIndex = frameMap.enterTemp(fieldClassType)
-                val name = scriptContext.getEnvironmentVarName(envVarIndex)
+                val name = scriptContext.getProvidedPropertyName(envVarIndex)
                 genFieldFromParam(fieldClassType, envVarParamIndex, name)
             }
 
@@ -211,12 +207,12 @@ class ScriptCodegen private constructor(
                 null
             )
         }
-        for (envVarIndex in scriptDescriptor.scriptEnvironmentProperties.indices) {
+        for (envVarIndex in scriptDescriptor.scriptProvidedProperties.indices) {
             classBuilder.newField(
                 NO_ORIGIN,
                 ACC_PUBLIC or ACC_FINAL,
-                scriptContext.getEnvironmentVarName(envVarIndex),
-                scriptContext.getEnvironmentVarType(envVarIndex).descriptor,
+                scriptContext.getProvidedPropertyName(envVarIndex),
+                scriptContext.getProvidedPropertyType(envVarIndex).descriptor,
                 null,
                 null
             )

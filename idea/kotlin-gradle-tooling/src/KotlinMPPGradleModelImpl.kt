@@ -28,7 +28,10 @@ class KotlinLanguageSettingsImpl(
     override val languageVersion: String?,
     override val apiVersion: String?,
     override val isProgressiveMode: Boolean,
-    override val enabledLanguageFeatures: Set<String>
+    override val enabledLanguageFeatures: Set<String>,
+    override val experimentalAnnotationsInUse: Set<String>,
+    override val compilerPluginArguments: List<String>,
+    override val compilerPluginClasspath: Set<File>
 ) : KotlinLanguageSettings
 
 class KotlinCompilationOutputImpl(
@@ -58,6 +61,7 @@ class KotlinCompilationImpl(
 
     override val isTestModule: Boolean
         get() = name == KotlinCompilation.TEST_COMPILATION_NAME
+                || platform == KotlinPlatform.ANDROID && name.contains("Test")
 
     override fun toString() = name
 }
@@ -68,6 +72,7 @@ class KotlinTargetJarImpl(
 
 class KotlinTargetImpl(
     override val name: String,
+    override val presetName: String?,
     override val disambiguationClassifier: String?,
     override val platform: KotlinPlatform,
     override val compilations: Collection<KotlinCompilation>,
@@ -83,5 +88,6 @@ class ExtraFeaturesImpl(
 class KotlinMPPGradleModelImpl(
     override val sourceSets: Map<String, KotlinSourceSet>,
     override val targets: Collection<KotlinTarget>,
-    override val extraFeatures: ExtraFeatures
+    override val extraFeatures: ExtraFeatures,
+    override val kotlinNativeHome: String
 ) : KotlinMPPGradleModel

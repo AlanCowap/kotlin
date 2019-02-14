@@ -25,7 +25,7 @@ private fun getDefaultSourceFile(f: Family): SourceFile = when (f) {
 @TemplateDsl
 class MemberBuilder(
         val allowedPlatforms: Set<Platform>,
-        val platform: Platform,
+        val target: KotlinTarget,
         var family: Family,
         var sourceFile: SourceFile = getDefaultSourceFile(family),
         var primitive: PrimitiveType? = null
@@ -60,7 +60,7 @@ class MemberBuilder(
     val typeParams = mutableListOf<String>()
     var primaryTypeParameter: String? = null; private set
     var customReceiver: String? = null; private set
-    var receiverAsterisk: Boolean = false // TODO: rename to genericStarProjection
+    var genericStarProjection: Boolean = false
     var toNullableT: Boolean = false
 
     var returns: String? = null; private set
@@ -143,11 +143,16 @@ class MemberBuilder(
 
     fun on(platform: Platform, action: () -> Unit) {
         require(platform in allowedPlatforms) { "Platform $platform is not in the list of allowed platforms $allowedPlatforms" }
-        if (this.platform == platform)
+        if (target.platform == platform)
             action()
         else {
             hasPlatformSpecializations = true
         }
+    }
+
+    fun on(backend: Backend, action: () -> Unit) {
+        require(target.platform == Platform.JS)
+        if (target.backend == backend) action()
     }
 
     fun specialFor(f: Family, action: () -> Unit) {
@@ -165,14 +170,14 @@ class MemberBuilder(
         val headerOnly: Boolean
         val isImpl: Boolean
         if (!legacyMode) {
-            headerOnly = platform == Platform.Common && hasPlatformSpecializations
-            isImpl = platform != Platform.Common && Platform.Common in allowedPlatforms
+            headerOnly = target.platform == Platform.Common && hasPlatformSpecializations
+            isImpl = target.platform != Platform.Common && Platform.Common in allowedPlatforms
         }
         else {
             // legacy mode when all is headerOnly + no_impl
             // except functions with optional parameters - they are common + no_impl
             val hasOptionalParams = signature.contains("=")
-            headerOnly =  platform == Platform.Common && !hasOptionalParams
+            headerOnly =  target.platform == Platform.Common && !hasOptionalParams
             isImpl = false
         }
 
@@ -246,19 +251,19 @@ class MemberBuilder(
             return answer.toString()
         }
 
-        val isAsteriskOrT = if (receiverAsterisk) "*" else primaryTypeParameter
+        val receiverT = if (genericStarProjection) "*" else primaryTypeParameter
         val self = (when (family) {
-            Iterables -> "Iterable<$isAsteriskOrT>"
-            Collections -> "Collection<$isAsteriskOrT>"
-            Lists -> "List<$isAsteriskOrT>"
+            Iterables -> "Iterable<$receiverT>"
+            Collections -> "Collection<$receiverT>"
+            Lists -> "List<$receiverT>"
             Maps -> "Map<out K, V>"
-            Sets -> "Set<$isAsteriskOrT>"
-            Sequences -> "Sequence<$isAsteriskOrT>"
+            Sets -> "Set<$receiverT>"
+            Sequences -> "Sequence<$receiverT>"
             InvariantArraysOfObjects -> "Array<$primaryTypeParameter>"
-            ArraysOfObjects -> "Array<${isAsteriskOrT.replace(primaryTypeParameter, "out $primaryTypeParameter")}>"
+            ArraysOfObjects -> "Array<${receiverT.replace(primaryTypeParameter, "out $primaryTypeParameter")}>"
             Strings -> "String"
             CharSequences -> "CharSequence"
-            Ranges -> "ClosedRange<$isAsteriskOrT>"
+            Ranges -> "ClosedRange<$receiverT>"
             ArraysOfPrimitives, ArraysOfUnsigned -> primitive?.let { it.name + "Array" } ?: throw IllegalArgumentException("Primitive array should specify primitive type")
             RangesOfPrimitives -> primitive?.let { it.name + "Range" } ?: throw IllegalArgumentException("Primitive range should specify primitive type")
             ProgressionsOfPrimitives -> primitive?.let { it.name + "Progression" } ?: throw IllegalArgumentException("Primitive progression should specify primitive type")
@@ -376,7 +381,7 @@ class MemberBuilder(
 
         val body = (body ?:
                 deprecate?.replaceWith?.let { "return $it" } ?:
-                throw RuntimeException("$signature for ${platform.fullName}: no body specified for ${family to primitive}")
+                """TODO("Body is not provided")""".also { System.err.println("ERROR: $signature for ${target.fullName}: no body specified for ${family to primitive}") }
                 ).trim('\n')
         val indent: Int = body.takeWhile { it == ' ' }.length
 

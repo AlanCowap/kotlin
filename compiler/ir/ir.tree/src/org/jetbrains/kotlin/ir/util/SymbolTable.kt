@@ -21,14 +21,29 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.*
 import org.jetbrains.kotlin.ir.declarations.lazy.IrLazySymbolTable
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.symbols.impl.*
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.impl.IrUninitializedType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
+
+interface IrDeserializer {
+    fun findDeserializedDeclaration(symbol: IrSymbol): IrDeclaration?
+    // We need a separate method for properties, because properties
+    // are treated differently in the SymbolTable.
+    // See SymbolTable.propertyTable and SymbolTable.referenceProperty.
+    // There was an attempt to solve this asymmetry in the symbol table
+    // using property symbols, but it was not successful.
+    // For now we have to live with a special treatment of properties.
+    // TODO: eventually get rid of this asymmetry.
+    fun findDeserializedDeclaration(propertyDescriptor: PropertyDescriptor): IrProperty?
+    fun declareForwardDeclarations()
+}
 
 interface ReferenceSymbolTable {
     fun referenceClass(descriptor: ClassDescriptor): IrClassSymbol
@@ -37,6 +52,7 @@ interface ReferenceSymbolTable {
 
     fun referenceEnumEntry(descriptor: ClassDescriptor): IrEnumEntrySymbol
     fun referenceField(descriptor: PropertyDescriptor): IrFieldSymbol
+    fun referenceProperty(descriptor: PropertyDescriptor, generate: () -> IrProperty): IrProperty
 
     fun referenceSimpleFunction(descriptor: FunctionDescriptor): IrSimpleFunctionSymbol
     fun referenceDeclaredFunction(descriptor: FunctionDescriptor): IrSimpleFunctionSymbol
@@ -216,7 +232,8 @@ open class SymbolTable : ReferenceSymbolTable {
 
     fun declareClass(
         startOffset: Int, endOffset: Int, origin: IrDeclarationOrigin, descriptor: ClassDescriptor,
-        classFactory: (IrClassSymbol) -> IrClass = { IrClassImpl(startOffset, endOffset, origin, it) }
+        modality: Modality = descriptor.modality,
+        classFactory: (IrClassSymbol) -> IrClass = { IrClassImpl(startOffset, endOffset, origin, it, modality) }
     ): IrClass {
         return classSymbolTable.declare(
             descriptor,
@@ -235,7 +252,7 @@ open class SymbolTable : ReferenceSymbolTable {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         descriptor: ClassConstructorDescriptor,
-        constructorFactory: (IrConstructorSymbol) -> IrConstructor = { IrConstructorImpl(startOffset, endOffset, origin, it) }
+        constructorFactory: (IrConstructorSymbol) -> IrConstructor = { IrConstructorImpl(startOffset, endOffset, origin, it, IrUninitializedType) }
     ): IrConstructor =
         constructorSymbolTable.declare(
             descriptor,
@@ -294,12 +311,16 @@ open class SymbolTable : ReferenceSymbolTable {
 
     val unboundFields: Set<IrFieldSymbol> get() = fieldSymbolTable.unboundSymbols
 
+    val propertyTable = HashMap<PropertyDescriptor, IrProperty>()
+    override fun referenceProperty(descriptor: PropertyDescriptor, generate: () -> IrProperty): IrProperty =
+        propertyTable.getOrPut(descriptor, generate)
+
     fun declareSimpleFunction(
         startOffset: Int,
         endOffset: Int,
         origin: IrDeclarationOrigin,
         descriptor: FunctionDescriptor,
-        functionFactory: (IrSimpleFunctionSymbol) -> IrSimpleFunction = { IrFunctionImpl(startOffset, endOffset, origin, it) }
+        functionFactory: (IrSimpleFunctionSymbol) -> IrSimpleFunction = { IrFunctionImpl(startOffset, endOffset, origin, it, IrUninitializedType) }
     ): IrSimpleFunction {
         return simpleFunctionSymbolTable.declare(
             descriptor,
@@ -464,6 +485,17 @@ open class SymbolTable : ReferenceSymbolTable {
                 // What about scoped type parameters?
                 globalTypeParameterSymbolTable.descriptorToSymbol[declaration.descriptor] = declaration.symbol
                 super.visitTypeParameter(declaration)
+            }
+
+            override fun visitCall(expression: IrCall) {
+                expression.symbol.let {
+                    when (it) {
+                        is IrSimpleFunctionSymbol -> simpleFunctionSymbolTable.descriptorToSymbol[it.descriptor] = it
+                        is IrConstructorSymbol -> constructorSymbolTable.descriptorToSymbol[it.descriptor] = it
+                    }
+                }
+
+                super.visitCall(expression)
             }
         })
     }

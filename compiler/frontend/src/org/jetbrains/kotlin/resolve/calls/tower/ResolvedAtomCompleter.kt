@@ -94,10 +94,12 @@ class ResolvedAtomCompleter(
             topLevelCallCheckerContext
 
         kotlinToResolvedCallTransformer.bindAndReport(topLevelCallContext, topLevelTrace, resolvedCall, diagnostics)
-        kotlinToResolvedCallTransformer.runCallCheckers(resolvedCall, callCheckerContext)
 
         val lastCall = if (resolvedCall is VariableAsFunctionResolvedCall) resolvedCall.functionCall else resolvedCall
+
         kotlinToResolvedCallTransformer.runArgumentsChecks(topLevelCallContext, topLevelTrace, lastCall as NewResolvedCallImpl<*>)
+        kotlinToResolvedCallTransformer.runCallCheckers(resolvedCall, callCheckerContext)
+        kotlinToResolvedCallTransformer.runAdditionalReceiversCheckers(resolvedCall, topLevelCallContext)
 
         return resolvedCall
     }

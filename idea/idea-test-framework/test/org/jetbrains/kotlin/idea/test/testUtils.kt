@@ -17,13 +17,9 @@
 package org.jetbrains.kotlin.idea.test
 
 import com.intellij.openapi.editor.Document
-import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ModifiableRootModel
-import com.intellij.openapi.roots.ModuleRootModificationUtil.updateModel
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.testFramework.LightPlatformTestCase
-import com.intellij.util.Consumer
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
 import org.jetbrains.kotlin.idea.caches.project.LibraryModificationTracker
@@ -33,46 +29,13 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import java.util.*
 
-enum class ModuleKind {
-    KOTLIN_JVM_WITH_STDLIB_SOURCES,
-    KOTLIN_JAVASCRIPT
-}
-
-fun Module.configureAs(descriptor: KotlinLightProjectDescriptor) {
-    val module = this
-    updateModel(module, Consumer<ModifiableRootModel> { model ->
-        if (descriptor.sdk != null) {
-            model.sdk = descriptor.sdk
-        }
-        val entries = model.contentEntries
-        if (entries.isEmpty()) {
-            descriptor.configureModule(module, model)
-        }
-        else {
-            descriptor.configureModule(module, model, entries[0])
-        }
-    })
-}
-
-@Suppress("DeprecatedCallableAddReplaceWith")
-@Deprecated("Please use correct ProjectDescriptor in tests from the very beginning")
-fun Module.configureAs(kind: ModuleKind) {
-    when (kind) {
-        ModuleKind.KOTLIN_JVM_WITH_STDLIB_SOURCES ->
-            this.configureAs(ProjectDescriptorWithStdlibSources.INSTANCE)
-        ModuleKind.KOTLIN_JAVASCRIPT -> {
-            this.configureAs(KotlinStdJSProjectDescriptor)
-        }
-    }
-}
-
 fun KtFile.dumpTextWithErrors(): String {
     val text = text
     if (InTextDirectivesUtils.isDirectiveDefined(text, "// DISABLE-ERRORS")) return text
     val diagnostics = analyzeWithContent().diagnostics
     val errors = diagnostics.filter { it.severity == Severity.ERROR }
     if (errors.isEmpty()) return text
-    val header = errors.map { "// ERROR: " + DefaultErrorMessages.render(it).replace('\n', ' ') }.joinToString("\n", postfix = "\n")
+    val header = errors.joinToString("\n", postfix = "\n") { "// ERROR: " + DefaultErrorMessages.render(it).replace('\n', ' ') }
     return header + text
 }
 
@@ -98,8 +61,9 @@ fun Document.extractMultipleMarkerOffsets(project: Project, caretMarker: String 
                 setText(text.toString())
 
                 offsets += offset
+            } else {
+                break
             }
-            else break
         }
     }
 

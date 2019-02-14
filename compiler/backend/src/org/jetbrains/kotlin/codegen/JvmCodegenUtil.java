@@ -20,6 +20,8 @@ import org.jetbrains.kotlin.codegen.context.MethodContext;
 import org.jetbrains.kotlin.codegen.context.RootContext;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
+import org.jetbrains.kotlin.config.JvmAnalysisFlags;
+import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
@@ -28,6 +30,7 @@ import org.jetbrains.kotlin.load.java.descriptors.JavaCallableMemberDescriptor;
 import org.jetbrains.kotlin.load.java.descriptors.JavaPropertyDescriptor;
 import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityUtilsKt;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMapping;
+import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.Call;
 import org.jetbrains.kotlin.psi.KtFile;
@@ -50,7 +53,6 @@ import java.io.File;
 import static org.jetbrains.kotlin.codegen.coroutines.CoroutineCodegenUtilKt.SUSPEND_FUNCTION_CREATE_METHOD_NAME;
 import static org.jetbrains.kotlin.descriptors.ClassKind.ANNOTATION_CLASS;
 import static org.jetbrains.kotlin.descriptors.ClassKind.INTERFACE;
-import static org.jetbrains.kotlin.descriptors.Modality.ABSTRACT;
 import static org.jetbrains.kotlin.descriptors.Modality.FINAL;
 import static org.jetbrains.kotlin.resolve.BindingContext.DELEGATED_PROPERTY_CALL;
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.isCompanionObject;
@@ -73,7 +75,7 @@ public class JvmCodegenUtil {
         return !hasJvmDefaultAnnotation(descriptor);
     }
 
-    public static boolean isJvmInterface(DeclarationDescriptor descriptor) {
+    public static boolean isJvmInterface(@Nullable DeclarationDescriptor descriptor) {
         if (descriptor instanceof ClassDescriptor) {
             ClassKind kind = ((ClassDescriptor) descriptor).getKind();
             return kind == INTERFACE || kind == ANNOTATION_CLASS;
@@ -146,14 +148,6 @@ public class JvmCodegenUtil {
         }
     }
 
-    public static boolean hasAbstractMembers(@NotNull ClassDescriptor classDescriptor) {
-        return CollectionsKt.any(
-                DescriptorUtils.getAllDescriptors(classDescriptor.getDefaultType().getMemberScope()),
-                descriptor -> descriptor instanceof CallableMemberDescriptor &&
-                              ((CallableMemberDescriptor) descriptor).getModality() == ABSTRACT
-        );
-    }
-
     public static boolean isConstOrHasJvmFieldAnnotation(@NotNull PropertyDescriptor propertyDescriptor) {
         return propertyDescriptor.isConst() || hasJvmFieldAnnotation(propertyDescriptor);
     }
@@ -197,8 +191,8 @@ public class JvmCodegenUtil {
         if (KotlinTypeMapper.isAccessor(property)) return false;
 
         CodegenContext context = contextBeforeInline.getFirstCrossInlineOrNonInlineContext();
-        // Inline functions or inline classes can't use direct access because a field may not be visible at the call site
-        if (context.isInlineMethodContext() || (context.getEnclosingClass() != null && context.getEnclosingClass().isInline())) {
+        // Inline functions can't use direct access because a field may not be visible at the call site
+        if (context.isInlineMethodContext()) {
             return false;
         }
 
@@ -244,10 +238,10 @@ public class JvmCodegenUtil {
         if (DescriptorPsiUtilsKt.hasBody(accessor)) return false;
 
         // If the accessor is private or final, it can't be overridden in the subclass and thus we can use direct access
-        return Visibilities.isPrivate(property.getVisibility()) || accessor.getModality() == FINAL;
+        return Visibilities.isPrivate(accessor.getVisibility()) || accessor.getModality() == FINAL;
     }
 
-    private static boolean isDebuggerContext(@NotNull CodegenContext context) {
+    public static boolean isDebuggerContext(@NotNull CodegenContext context) {
         KtFile file = DescriptorToSourceUtils.getContainingFile(context.getContextDescriptor());
         return file != null && CodeFragmentUtilKt.getSuppressDiagnosticsInDebugMode(file);
     }
@@ -348,6 +342,11 @@ public class JvmCodegenUtil {
                !JvmAbi.isMappedIntrinsicCompanionObject((ClassDescriptor) companionObject);
     }
 
+    public static boolean isNonIntrinsicPrivateCompanionObjectInInterface(@NotNull DeclarationDescriptorWithVisibility companionObject) {
+        return isCompanionObjectInInterfaceNotIntrinsic(companionObject) &&
+               Visibilities.isPrivate(companionObject.getVisibility());
+    }
+
     public static boolean isDeclarationOfBigArityFunctionInvoke(@Nullable DeclarationDescriptor descriptor) {
         return descriptor instanceof FunctionInvokeDescriptor && ((FunctionInvokeDescriptor) descriptor).hasBigArity();
     }
@@ -378,5 +377,18 @@ public class JvmCodegenUtil {
         assert superClass != null || state.getClassBuilderMode() == ClassBuilderMode.LIGHT_CLASSES
                 : "ClassDescriptor should not be null:" + specifier.getText();
         return superClass;
+    }
+
+    public static boolean isPolymorphicSignature(@NotNull FunctionDescriptor descriptor) {
+        return descriptor.getAnnotations().hasAnnotation(new FqName("java.lang.invoke.MethodHandle.PolymorphicSignature"));
+    }
+
+    @NotNull
+    public static String sanitizeNameIfNeeded(@NotNull String name, @NotNull LanguageVersionSettings languageVersionSettings) {
+        if (languageVersionSettings.getFlag(JvmAnalysisFlags.getSanitizeParentheses())) {
+            return name.replace("(", "$_").replace(")", "$_");
+        }
+
+        return name;
     }
 }

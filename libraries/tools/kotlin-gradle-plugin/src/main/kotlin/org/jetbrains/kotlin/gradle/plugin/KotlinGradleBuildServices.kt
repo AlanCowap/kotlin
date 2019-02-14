@@ -19,14 +19,26 @@ package org.jetbrains.kotlin.gradle.plugin
 import org.gradle.BuildAdapter
 import org.gradle.BuildResult
 import org.gradle.api.invocation.Gradle
+import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
 import org.jetbrains.kotlin.compilerRunner.DELETED_SESSION_FILE_PREFIX
 import org.jetbrains.kotlin.compilerRunner.GradleCompilerRunner
+import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskLoggers
+import org.jetbrains.kotlin.gradle.logging.kotlinDebug
+import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskExecutionResults
+import org.jetbrains.kotlin.gradle.report.KotlinBuildReporter
+import org.jetbrains.kotlin.gradle.report.configureBuildReporter
+import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.gradle.utils.relativeToRoot
 import org.jetbrains.kotlin.utils.addToStdlib.sumByLong
+import java.io.File
 import java.lang.management.ManagementFactory
+import java.text.SimpleDateFormat
+import java.util.*
 
-internal class KotlinGradleBuildServices private constructor(gradle: Gradle) : BuildAdapter() {
+internal class KotlinGradleBuildServices private constructor(
+    private val gradle: Gradle
+) : BuildAdapter() {
     companion object {
         private val CLASS_NAME = KotlinGradleBuildServices::class.java.simpleName
         const val FORCE_SYSTEM_GC_MESSAGE = "Forcing System.gc()"
@@ -66,9 +78,17 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle) : B
     // but it is called before any plugin can attach build listener
     fun buildStarted() {
         startMemory = getUsedMemoryKb()
+
+        TaskLoggers.clear()
+        TaskExecutionResults.clear()
+
+        configureBuildReporter(gradle, log)
     }
 
     override fun buildFinished(result: BuildResult) {
+        TaskLoggers.clear()
+        TaskExecutionResults.clear()
+
         val gradle = result.gradle!!
         GradleCompilerRunner.clearBuildModulesInfo()
 
@@ -108,12 +128,14 @@ internal class KotlinGradleBuildServices private constructor(gradle: Gradle) : B
         log.lifecycle(FORCE_SYSTEM_GC_MESSAGE)
         val gcCountBefore = getGcCount()
         System.gc()
-        while (getGcCount() == gcCountBefore) {}
+        while (getGcCount() == gcCountBefore) {
+        }
 
         val rt = Runtime.getRuntime()
         return (rt.totalMemory() - rt.freeMemory()) / 1024
     }
 
     private fun getGcCount(): Long =
-            ManagementFactory.getGarbageCollectorMXBeans().sumByLong { Math.max(0, it.collectionCount) }
+        ManagementFactory.getGarbageCollectorMXBeans().sumByLong { Math.max(0, it.collectionCount) }
 }
+

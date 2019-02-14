@@ -1,6 +1,12 @@
-// IGNORE_BACKEND: JS_IR
+// KJS_WITH_FULL_RUNTIME
 // EXPECTED_REACHABLE_NODES: 1523
-fun imul32(a: Int, b: Int): Int = js("Kotlin").imulEmulated(a, b)
+
+//@library
+//@JsName("imulEmulated")
+//internal fun imul(Int, Int): Int
+
+@Suppress("INVISIBLE_MEMBER")
+fun imul32(a: Int, b: Int): Int = imul(a, b)
 
 fun imul64(a: Int, b: Int): Int = (a.toLong() * b.toLong()).toInt()
 

@@ -13,7 +13,6 @@ import org.jetbrains.kotlin.codegen.`when`.MappingsClassesForWhenByEnum
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.context.CodegenContext
 import org.jetbrains.kotlin.codegen.context.RootContext
-import org.jetbrains.kotlin.codegen.coroutines.GlobalCoroutinesContext
 import org.jetbrains.kotlin.codegen.extensions.ClassBuilderInterceptorExtension
 import org.jetbrains.kotlin.codegen.inline.GlobalInlineContext
 import org.jetbrains.kotlin.codegen.inline.InlineCache
@@ -25,6 +24,7 @@ import org.jetbrains.kotlin.descriptors.ScriptDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.DiagnosticSink
 import org.jetbrains.kotlin.idea.MainFunctionDetector
+import org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 import org.jetbrains.kotlin.modules.TargetId
@@ -35,12 +35,14 @@ import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.deprecation.CoroutineCompatibilitySupport
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
+import org.jetbrains.kotlin.resolve.deprecation.DeprecationSettings
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind.*
 import org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
+import org.jetbrains.kotlin.types.KotlinType
 import java.io.File
 
 class GenerationState private constructor(
@@ -143,7 +145,7 @@ class GenerationState private constructor(
         CompilerDeserializationConfiguration(configuration.languageVersionSettings)
 
     val deprecationProvider =
-        DeprecationResolver(LockBasedStorageManager.NO_LOCKS, configuration.languageVersionSettings, CoroutineCompatibilitySupport.ENABLED)
+        DeprecationResolver(LockBasedStorageManager.NO_LOCKS, configuration.languageVersionSettings, CoroutineCompatibilitySupport.ENABLED, JavaDeprecationSettings)
 
     init {
         val icComponents = configuration.get(JVMConfigurationKeys.INCREMENTAL_COMPILATION_COMPONENTS)
@@ -193,7 +195,7 @@ class GenerationState private constructor(
         IncompatibleClassTrackerImpl(extraJvmDiagnosticsTrace),
         this.moduleName,
         target,
-        configuration.languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
+        languageVersionSettings,
         isIrBackend
     )
     val intrinsics: IntrinsicMethods = run {
@@ -203,7 +205,6 @@ class GenerationState private constructor(
     }
     val samWrapperClasses: SamWrapperClasses = SamWrapperClasses(this)
     val globalInlineContext: GlobalInlineContext = GlobalInlineContext(diagnostics)
-    val globalCoroutinesContext: GlobalCoroutinesContext = GlobalCoroutinesContext(diagnostics)
     val mappingsClassesForWhenByEnum: MappingsClassesForWhenByEnum = MappingsClassesForWhenByEnum(this)
     val jvmRuntimeTypes: JvmRuntimeTypes = JvmRuntimeTypes(module, configuration.languageVersionSettings)
     val factory: ClassFileFactory
@@ -216,6 +217,7 @@ class GenerationState private constructor(
         var earlierScriptsForReplInterpreter: List<ScriptDescriptor>? = null
         var scriptResultFieldName: String? = null
         val shouldGenerateScriptResultValue: Boolean get() = scriptResultFieldName != null
+        var resultType: KotlinType? = null
         var hasResult: Boolean = false
     }
 
@@ -227,7 +229,6 @@ class GenerationState private constructor(
     val assertionsMode: JVMAssertionsMode = configuration.get(JVMConfigurationKeys.ASSERTIONS_MODE, JVMAssertionsMode.DEFAULT)
     val isInlineDisabled: Boolean = configuration.getBoolean(CommonConfigurationKeys.DISABLE_INLINE)
     val useTypeTableInSerializer: Boolean = configuration.getBoolean(JVMConfigurationKeys.USE_TYPE_TABLE)
-    val inheritMultifileParts: Boolean = configuration.getBoolean(JVMConfigurationKeys.INHERIT_MULTIFILE_PARTS)
 
     val rootContext: CodegenContext<*> = RootContext(this)
 
@@ -245,7 +246,7 @@ class GenerationState private constructor(
                 JVMConstructorCallNormalizationMode.DISABLE
         }
 
-    val jvmDefaultMode = languageVersionSettings.getFlag(AnalysisFlag.jvmDefaultMode)
+    val jvmDefaultMode = languageVersionSettings.getFlag(JvmAnalysisFlags.jvmDefaultMode)
 
     val disableOptimization = configuration.get(JVMConfigurationKeys.DISABLE_OPTIMIZATION, false)
 
@@ -254,11 +255,15 @@ class GenerationState private constructor(
     init {
         this.interceptedBuilderFactory = builderFactory
             .wrapWith(
-                { OptimizationClassBuilderFactory(it, this) },
+                {
+                    if (classBuilderMode.generateBodies)
+                        OptimizationClassBuilderFactory(it, this)
+                    else
+                        it
+                },
                 {
                     BuilderFactoryForDuplicateSignatureDiagnostics(
-                        it, this.bindingContext, diagnostics, this.moduleName,
-                        isReleaseCoroutines = languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
+                        it, this.bindingContext, diagnostics, this.moduleName, this.languageVersionSettings,
                         shouldGenerate = { !shouldOnlyCollectSignatures(it) },
                         isIrBackend = isIrBackend
                     ).apply { duplicateSignatureFactory = this }

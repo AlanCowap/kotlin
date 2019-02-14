@@ -17,15 +17,21 @@ import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.defaultConstructor.AbstractDefaultArgumentsReflectionTest
 import org.jetbrains.kotlin.codegen.flags.AbstractWriteFlagsTest
 import org.jetbrains.kotlin.codegen.ir.*
+import org.jetbrains.kotlin.fir.AbstractFirResolveTestCase
+import org.jetbrains.kotlin.fir.AbstractFirResolveTestCaseWithStdlib
+import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
 import org.jetbrains.kotlin.generators.tests.generator.testGroup
 import org.jetbrains.kotlin.generators.util.KT_OR_KTS_WITHOUT_DOTS_IN_NAME
+import org.jetbrains.kotlin.generators.util.KT_WITHOUT_DOTS_IN_NAME
 import org.jetbrains.kotlin.integration.AbstractAntTaskTest
 import org.jetbrains.kotlin.ir.AbstractIrCfgTestCase
+import org.jetbrains.kotlin.ir.AbstractIrJsTextTestCase
 import org.jetbrains.kotlin.ir.AbstractIrSourceRangesTestCase
 import org.jetbrains.kotlin.ir.AbstractIrTextTestCase
 import org.jetbrains.kotlin.jvm.compiler.*
 import org.jetbrains.kotlin.jvm.compiler.javac.AbstractLoadJavaUsingJavacTest
-import org.jetbrains.kotlin.kdoc.AbstractKDocLexerTest
+import org.jetbrains.kotlin.lexer.kdoc.AbstractKDocLexerTest
+import org.jetbrains.kotlin.lexer.kotlin.AbstractKotlinLexerTest
 import org.jetbrains.kotlin.modules.xml.AbstractModuleXmlParserTest
 import org.jetbrains.kotlin.multiplatform.AbstractMultiPlatformIntegrationTest
 import org.jetbrains.kotlin.parsing.AbstractParsingTest
@@ -48,8 +54,7 @@ fun main(args: Array<String>) {
     testGroup("compiler/tests", "compiler/testData") {
 
         testClass<AbstractDiagnosticsTest> {
-            model("diagnostics/tests")
-            model("diagnostics/tests/script", extension = "kts")
+            model("diagnostics/tests", pattern = "^(.*)\\.kts?$")
             model("codegen/box/diagnostics")
         }
 
@@ -184,6 +189,10 @@ fun main(args: Array<String>) {
             model("ir/irText")
         }
 
+        testClass<AbstractIrJsTextTestCase> {
+            model("ir/irJsText")
+        }
+
         testClass<AbstractIrCfgTestCase> {
             model("ir/irCfg")
         }
@@ -191,6 +200,8 @@ fun main(args: Array<String>) {
         testClass<AbstractIrSourceRangesTestCase> {
             model("ir/sourceRanges")
         }
+
+
 
         testClass<AbstractBytecodeListingTest> {
             model("codegen/bytecodeListing")
@@ -334,7 +345,11 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractKDocLexerTest> {
-            model("kdoc/lexer")
+            model("lexer/kdoc")
+        }
+
+        testClass<AbstractKotlinLexerTest> {
+            model("lexer/kotlin")
         }
 
         testClass<AbstractIrBlackBoxCodegenTest> {
@@ -355,6 +370,26 @@ fun main(args: Array<String>) {
 
         testClass<AbstractIrBlackBoxInlineCodegenTest> {
             model("codegen/boxInline", targetBackend = TargetBackend.JVM_IR)
+        }
+
+        testClass<AbstractIrBytecodeTextTest> {
+            model("codegen/bytecodeText", targetBackend = TargetBackend.JVM_IR)
+        }
+    }
+
+    testGroup("compiler/fir/psi2fir/tests", "compiler/fir/psi2fir/testData") {
+        testClass<AbstractRawFirBuilderTestCase> {
+            model("rawBuilder", testMethod = "doRawFirTest")
+        }
+    }
+
+    testGroup("compiler/fir/resolve/tests", "compiler/fir/resolve/testData") {
+        testClass<AbstractFirResolveTestCase> {
+            model("resolve", pattern = KT_WITHOUT_DOTS_IN_NAME, excludeDirs = listOf("stdlib"))
+        }
+
+        testClass<AbstractFirResolveTestCaseWithStdlib> {
+            model("resolve/stdlib", pattern = KT_WITHOUT_DOTS_IN_NAME)
         }
     }
 }

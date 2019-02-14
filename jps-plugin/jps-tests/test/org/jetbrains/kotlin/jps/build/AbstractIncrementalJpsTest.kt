@@ -46,14 +46,10 @@ import org.jetbrains.jps.util.JpsPathUtil
 import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
 import org.jetbrains.kotlin.config.IncrementalCompilation
 import org.jetbrains.kotlin.incremental.LookupSymbol
-import org.jetbrains.kotlin.incremental.storage.version.CacheAttributesDiff
-import org.jetbrains.kotlin.incremental.storage.version.CacheVersionManager
 import org.jetbrains.kotlin.incremental.testingUtils.*
 import org.jetbrains.kotlin.jps.build.dependeciestxt.ModulesTxt
 import org.jetbrains.kotlin.jps.build.dependeciestxt.ModulesTxtBuilder
-import org.jetbrains.kotlin.jps.incremental.CompositeLookupsCacheAttributesManager
-import org.jetbrains.kotlin.jps.incremental.getKotlinCache
-import org.jetbrains.kotlin.jps.incremental.withLookupStorage
+import org.jetbrains.kotlin.jps.incremental.*
 import org.jetbrains.kotlin.jps.model.JpsKotlinFacetModuleExtension
 import org.jetbrains.kotlin.jps.model.kotlinFacet
 import org.jetbrains.kotlin.jps.targets.KotlinModuleBuildTarget
@@ -71,8 +67,7 @@ import kotlin.reflect.jvm.javaField
 
 abstract class AbstractIncrementalJpsTest(
     private val allowNoFilesWithSuffixInTestData: Boolean = false,
-    private val checkDumpsCaseInsensitively: Boolean = false,
-    private val allowNoBuildLogFileInTestData: Boolean = false
+    private val checkDumpsCaseInsensitively: Boolean = false
 ) : BaseKotlinJpsBuildTestCase() {
     companion object {
         private val COMPILATION_FAILED = "COMPILATION FAILED"
@@ -309,6 +304,7 @@ abstract class AbstractIncrementalJpsTest(
     protected open fun doTest(testDataPath: String) {
         testDataDir = File(testDataPath)
         workDir = FileUtilRt.createTempDirectory(TEMP_DIRECTORY_TO_USE, "jps-build", null)
+        val buildLogFile = buildLogFinder.findBuildLog(testDataDir)
         Disposer.register(testRootDisposable, Disposable { FileUtilRt.delete(workDir) })
 
         val modulesTxt = configureModules()
@@ -316,19 +312,19 @@ abstract class AbstractIncrementalJpsTest(
 
         initialMake()
 
-        val otherMakeResults = performModificationsAndMake(modulesTxt?.modules?.map { it.name })
-        val buildLogFile = buildLogFinder.findBuildLog(testDataDir)
-        val logs = createBuildLog(otherMakeResults)
+        val otherMakeResults = performModificationsAndMake(
+            modulesTxt?.modules?.map { it.name },
+            hasBuildLog = buildLogFile != null
+        )
 
-        if (buildLogFile != null && buildLogFile.exists()) {
+        buildLogFile?.let {
+            val logs = createBuildLog(otherMakeResults)
             UsefulTestCase.assertSameLinesWithFile(buildLogFile.absolutePath, logs)
-        } else if (!allowNoBuildLogFileInTestData) {
-            throw IllegalStateException("No build log file in $testDataDir")
-        }
 
-        val lastMakeResult = otherMakeResults.last()
-        rebuildAndCheckOutput(lastMakeResult)
-        clearCachesRebuildAndCheckOutput(lastMakeResult)
+            val lastMakeResult = otherMakeResults.last()
+            rebuildAndCheckOutput(lastMakeResult)
+            clearCachesRebuildAndCheckOutput(lastMakeResult)
+        }
     }
 
     private fun createMappingsDump(
@@ -415,14 +411,24 @@ abstract class AbstractIncrementalJpsTest(
     open val testDataSrc: File
         get() = testDataDir
 
-    private fun performModificationsAndMake(moduleNames: Collection<String>?): List<MakeResult> {
+    private fun performModificationsAndMake(
+        moduleNames: Collection<String>?,
+        hasBuildLog: Boolean
+    ): List<MakeResult> {
         val results = arrayListOf<MakeResult>()
         val modifications = getModificationsToPerform(
             testDataSrc,
             moduleNames,
-            allowNoFilesWithSuffixInTestData,
-            TouchPolicy.TIMESTAMP
+            allowNoFilesWithSuffixInTestData = allowNoFilesWithSuffixInTestData || !hasBuildLog,
+            touchPolicy = TouchPolicy.TIMESTAMP
         )
+
+        if (!hasBuildLog) {
+            check(modifications.size == 1 && modifications.single().isEmpty()) {
+                "Bad test data: build steps are provided, but there is no `build.log` file"
+            }
+            return results
+        }
 
         val stepsTxt = File(testDataSrc, "_steps.txt")
         val modificationNames = if (stepsTxt.exists()) stepsTxt.readLines() else null
@@ -569,7 +575,7 @@ abstract class AbstractIncrementalJpsTest(
                 else -> error("Unknown cache manager $cacheManager")
             }
 
-            logLine("$cacheTitle are $attributesDiff")
+            logLine("$cacheTitle are ${attributesDiff.status}")
         }
 
         override fun markedAsDirtyBeforeRound(files: Iterable<File>) {

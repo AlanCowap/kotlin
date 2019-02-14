@@ -5,11 +5,14 @@
 
 package org.jetbrains.kotlin.idea.configuration.ui;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.util.ui.AsyncProcessIcon;
 import org.jetbrains.kotlin.idea.KotlinPluginUtil;
+import org.jetbrains.kotlin.idea.util.VersioningKt;
 
 import javax.swing.*;
+import java.util.List;
 
 public class ConfigurePluginUpdatesForm {
     public JComboBox<String> channelCombo;
@@ -21,8 +24,27 @@ public class ConfigurePluginUpdatesForm {
     public JLabel installStatusLabel;
     private JLabel verifierDisabledText;
     private JTextPane currentVersion;
+    private JPanel bundledCompilerVersionPanel;
+    private JTextPane compilerVersion;
 
     public ConfigurePluginUpdatesForm() {
+        showVerifierDisabledStatus();
+        currentVersion.setText(KotlinPluginUtil.getPluginVersion());
+
+        if (ApplicationManager.getApplication().isInternal()) {
+            String buildNumber = VersioningKt.getBuildNumber();
+            compilerVersion.setText(buildNumber);
+        } else {
+            bundledCompilerVersionPanel.setVisible(false);
+        }
+    }
+
+    public void initChannels(List<String> channels) {
+        channelCombo.removeAllItems();
+        for (String channel : channels) {
+            channelCombo.addItem(channel);
+        }
+
         int size = channelCombo.getModel().getSize();
         String maxLengthItem = "";
         for (int i = 0; i < size; i++) {
@@ -32,8 +54,6 @@ public class ConfigurePluginUpdatesForm {
             }
         }
         channelCombo.setPrototypeDisplayValue(maxLengthItem + " ");
-        showVerifierDisabledStatus();
-        currentVersion.setText(KotlinPluginUtil.getPluginVersion());
     }
 
     private void createUIComponents() {

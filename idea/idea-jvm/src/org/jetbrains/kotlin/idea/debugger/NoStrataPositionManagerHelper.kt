@@ -26,11 +26,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.util.containers.ConcurrentWeakFactoryMap
-import com.intellij.util.containers.ContainerUtil
+import com.intellij.util.containers.ConcurrentFactoryMap
 import com.sun.jdi.Location
 import com.sun.jdi.ReferenceType
-import org.jetbrains.kotlin.codegen.inline.API
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinDebuggerCaches
 import org.jetbrains.kotlin.idea.refactoring.getLineCount
@@ -110,17 +108,14 @@ fun getLastLineNumberForLocation(location: Location, project: Project, searchSco
     return lineMapping.values.firstOrNull { it.contains(lineNumber) }?.last()
 }
 
-class WeakBytecodeDebugInfoStorage : ConcurrentWeakFactoryMap<BinaryCacheKey, BytecodeDebugInfo?>() {
-    override fun create(key: BinaryCacheKey): BytecodeDebugInfo? {
-        val bytes = readClassFileImpl(key.project, key.jvmName, key.file) ?: return null
+fun createWeakBytecodeDebugInfoStorage(): ConcurrentMap<BinaryCacheKey, BytecodeDebugInfo?> {
+    return ConcurrentFactoryMap.createWeakMap<BinaryCacheKey, BytecodeDebugInfo?> { key ->
+        val bytes = readClassFileImpl(key.project, key.jvmName, key.file) ?: return@createWeakMap null
 
         val smapData = readDebugInfo(bytes)
         val lineNumberMapping = readLineNumberTableMapping(bytes)
 
-        return BytecodeDebugInfo(smapData, lineNumberMapping)
-    }
-    override fun createMap(): ConcurrentMap<BinaryCacheKey, BytecodeDebugInfo?> {
-        return ContainerUtil.createConcurrentWeakKeyWeakValueMap()
+        BytecodeDebugInfo(smapData, lineNumberMapping)
     }
 }
 
@@ -208,7 +203,7 @@ private fun findClassFileByPath(packageName: String, className: String, outputDi
 private fun readLineNumberTableMapping(bytes: ByteArray): Map<BytecodeMethodKey, Map<String, Set<Int>>> {
     val lineNumberMapping = HashMap<BytecodeMethodKey, Map<String, Set<Int>>>()
 
-    ClassReader(bytes).accept(object : ClassVisitor(API) {
+    ClassReader(bytes).accept(object : ClassVisitor(Opcodes.API_VERSION) {
         override fun visitMethod(access: Int, name: String?, desc: String?, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
             if (name == null || desc == null) {
                 return null
@@ -218,7 +213,7 @@ private fun readLineNumberTableMapping(bytes: ByteArray): Map<BytecodeMethodKey,
             val methodLinesMapping = HashMap<String, MutableSet<Int>>()
             lineNumberMapping[methodKey] = methodLinesMapping
 
-            return object : MethodVisitor(Opcodes.ASM5, null) {
+            return object : MethodVisitor(Opcodes.API_VERSION, null) {
                 override fun visitLineNumber(line: Int, start: Label?) {
                     if (start != null) {
                         methodLinesMapping.getOrPutNullable(start.toString(), { LinkedHashSet<Int>() }).add(line)

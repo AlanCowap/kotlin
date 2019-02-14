@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.scratch
@@ -20,7 +9,6 @@ import com.intellij.ide.scratch.ScratchFileService
 import com.intellij.ide.scratch.ScratchRootType
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.CompilerModuleExtension
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.util.io.FileUtil
@@ -37,6 +25,7 @@ import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesManager
 import org.jetbrains.kotlin.idea.highlighter.KotlinHighlightingUtil
 import org.jetbrains.kotlin.idea.scratch.actions.RunScratchAction
+import org.jetbrains.kotlin.idea.scratch.actions.ScratchCompilationSupport
 import org.jetbrains.kotlin.idea.scratch.output.InlayScratchFileRenderer
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
@@ -71,16 +60,16 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         javaFiles.forEach { myFixture.copyFileToProject(it.path, FileUtil.getRelativePath(baseDir, it)!!) }
         kotlinFiles.forEach { myFixture.copyFileToProject(it.path, FileUtil.getRelativePath(baseDir, it)!!) }
 
-        val outputDir = myFixture.tempDirFixture.findOrCreateDir("out")
-
-        MockLibraryUtil.compileKotlin(baseDir.path, File(outputDir.path))
+        val outputDir = createTempDir(dirName)
 
         if (javaFiles.isNotEmpty()) {
             val options = Arrays.asList("-d", outputDir.path)
             KotlinTestUtils.compileJavaFiles(javaFiles, options)
         }
 
-        PsiTestUtil.setCompilerOutputPath(myModule, outputDir.url, false)
+        MockLibraryUtil.compileKotlin(baseDir.path, outputDir)
+
+        PsiTestUtil.setCompilerOutputPath(myModule, outputDir.path, false)
 
         val mainFileName = "$dirName/${getTestName(true)}.kts"
         doCompilingTest(mainFileName)
@@ -112,17 +101,17 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         if (!KotlinHighlightingUtil.shouldHighlight(psiFile)) error("Highlighting for scratch file is switched off")
 
         val (editor, scratchPanel) = getEditorWithScratchPanel(myManager, scratchFile)?: error("Couldn't find scratch panel")
-        scratchPanel.setReplMode(isRepl)
+        scratchPanel.scratchFile.saveOptions {
+            copy(isRepl = isRepl, isInteractiveMode = false)
+        }
 
-        val action = RunScratchAction(scratchPanel)
-        val event = getActionEvent(scratchFile, action)
-        launchAction(event, action)
+        launchScratch(scratchFile)
 
         UIUtil.dispatchAllInvocationEvents()
 
         val start = System.currentTimeMillis()
         // wait until output is displayed in editor or for 1 minute
-        while (!event.presentation.isEnabled && (System.currentTimeMillis() - start) < 60000) {
+        while (ScratchCompilationSupport.isAnyInProgress() && (System.currentTimeMillis() - start) < 60000) {
             Thread.sleep(100)
         }
 
@@ -152,7 +141,10 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         KotlinTestUtils.assertEqualsToFile(expectedFile, actualOutput.toString())
     }
 
-    private fun launchAction(e: TestActionEvent, action: AnAction) {
+    private fun launchScratch(scratchFile: VirtualFile) {
+        val action = RunScratchAction()
+        val e = getActionEvent(scratchFile, action)
+
         action.beforeActionPerformedUpdate(e)
         Assert.assertTrue(e.presentation.isEnabled && e.presentation.isVisible)
         action.actionPerformed(e)
@@ -161,7 +153,8 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
     private fun getActionEvent(virtualFile: VirtualFile, action: AnAction): TestActionEvent {
         val context = MapDataContext()
         context.put(CommonDataKeys.VIRTUAL_FILE_ARRAY, arrayOf(virtualFile))
-        context.put<Project>(CommonDataKeys.PROJECT, project)
+        context.put(CommonDataKeys.PROJECT, project)
+        context.put(CommonDataKeys.EDITOR, myFixture.editor)
         return TestActionEvent(context, action)
     }
 

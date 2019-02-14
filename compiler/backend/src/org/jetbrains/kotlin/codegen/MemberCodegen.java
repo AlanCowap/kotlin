@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.codegen.inline.ReifiedTypeParametersUsages;
 import org.jetbrains.kotlin.codegen.inline.SourceMapper;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
+import org.jetbrains.kotlin.codegen.state.TypeMapperUtilsKt;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.AnnotatedImpl;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
@@ -32,6 +33,7 @@ import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptor;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
+import org.jetbrains.kotlin.resolve.InlineClassesUtilsKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.constants.ConstantValue;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
@@ -72,7 +74,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
     public final GenerationState state;
 
     protected final T element;
-    protected final FieldOwnerContext context;
+    protected final FieldOwnerContext<?> context;
 
     public final ClassBuilder v;
     public final FunctionCodegen functionCodegen;
@@ -259,7 +261,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
         int flags = ACC_DEPRECATED | ACC_STATIC | ACC_SYNTHETIC | AsmUtil.getVisibilityAccessFlag(descriptor);
         MethodVisitor mv = v.newMethod(JvmDeclarationOriginKt.OtherOrigin(descriptor), flags, syntheticMethod.getName(),
                                        syntheticMethod.getDescriptor(), null, null);
-        AnnotationCodegen.forMethod(mv, this, typeMapper).genAnnotations(new AnnotatedImpl(annotations), Type.VOID_TYPE);
+        AnnotationCodegen.forMethod(mv, this, state).genAnnotations(new AnnotatedImpl(annotations), Type.VOID_TYPE);
         mv.visitCode();
         mv.visitInsn(Opcodes.RETURN);
         mv.visitEnd();
@@ -406,7 +408,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
                     return typeMapper.mapDefaultImpls(classDescriptor);
                 }
             }
-            return typeMapper.mapType(classDescriptor);
+            return typeMapper.mapClass(classDescriptor);
         }
         else if (outermost instanceof MultifileClassFacadeContext || outermost instanceof DelegatingToPartContext) {
             Type implementationOwnerType = CodegenContextUtil.getImplementationOwnerClassType(outermost);
@@ -453,15 +455,11 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
         if (clInit == null) {
             DeclarationDescriptor contextDescriptor = context.getContextDescriptor();
             SimpleFunctionDescriptorImpl clInitDescriptor = createClInitFunctionDescriptor(contextDescriptor);
-            MethodVisitor mv = createClInitMethodVisitor(contextDescriptor);
+            MethodVisitor mv =
+                    v.newMethod(JvmDeclarationOriginKt.OtherOrigin(contextDescriptor), ACC_STATIC, "<clinit>", "()V", null, null);
             clInit = new ExpressionCodegen(mv, new FrameMap(), Type.VOID_TYPE, context.intoFunction(clInitDescriptor), state, this);
         }
         return clInit;
-    }
-
-    @NotNull
-    public MethodVisitor createClInitMethodVisitor(@NotNull DeclarationDescriptor contextDescriptor) {
-        return v.newMethod(JvmDeclarationOriginKt.OtherOrigin(contextDescriptor), ACC_STATIC, "<clinit>", "()V", null, null);
     }
 
     @NotNull
@@ -494,9 +492,6 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
         }
     }
 
-    public void beforeMethodBody(@NotNull MethodVisitor mv) {
-    }
-
     // Requires public access, because it is used by serialization plugin to generate initializer in synthetic constructor
     public void initializeProperty(@NotNull ExpressionCodegen codegen, @NotNull KtProperty property) {
         PropertyDescriptor propertyDescriptor = (PropertyDescriptor) bindingContext.get(VARIABLE, property);
@@ -509,19 +504,29 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
                 propertyDescriptor, true, false, null, true, StackValue.LOCAL_0, null, false
         );
 
-        ResolvedCall<FunctionDescriptor> provideDelegateResolvedCall = bindingContext.get(PROVIDE_DELEGATE_RESOLVED_CALL, propertyDescriptor);
-        if (provideDelegateResolvedCall == null) {
+        if (property.getDelegateExpression() == null) {
             propValue.store(codegen.gen(initializer), codegen.v);
-            return;
         }
+        else {
+            StackValue.Property delegate = propValue.getDelegateOrNull();
+            assert delegate != null : "No delegate for delegated property: " + propertyDescriptor;
 
-        StackValue provideDelegateReceiver = codegen.gen(initializer);
+            ResolvedCall<FunctionDescriptor> provideDelegateResolvedCall =
+                    bindingContext.get(PROVIDE_DELEGATE_RESOLVED_CALL, propertyDescriptor);
 
-        StackValue delegateValue = PropertyCodegen.invokeDelegatedPropertyConventionMethod(
-                codegen, provideDelegateResolvedCall, provideDelegateReceiver, propertyDescriptor
-        );
+            if (provideDelegateResolvedCall == null) {
+                delegate.store(codegen.gen(initializer), codegen.v);
+            }
+            else {
+                StackValue provideDelegateReceiver = codegen.gen(initializer);
 
-        propValue.store(delegateValue, codegen.v);
+                StackValue delegateValue = PropertyCodegen.invokeDelegatedPropertyConventionMethod(
+                        codegen, provideDelegateResolvedCall, provideDelegateReceiver, propertyDescriptor
+                );
+
+                delegate.store(delegateValue, codegen.v);
+            }
+        }
     }
 
     // Public accessible for serialization plugin to check whether call to initializeProperty(..) is legal.
@@ -862,17 +867,25 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
                 functionDescriptor,
                 accessorDescriptor instanceof AccessorForCallableDescriptor &&
                 (((AccessorForCallableDescriptor) accessorDescriptor).getSuperCallTarget() != null ||
-                 ((AccessorForCallableDescriptor) accessorDescriptor).getAccessorKind() == AccessorKind.JVM_DEFAULT_COMPATIBILITY)
+                 ((AccessorForCallableDescriptor) accessorDescriptor).getAccessorKind() == AccessorKind.JVM_DEFAULT_COMPATIBILITY),
+                (accessorDescriptor != null && TypeMapperUtilsKt.isInlineClassConstructorAccessor(accessorDescriptor)
+                 ? OwnerKind.ERASED_INLINE_CLASS : null)
         );
 
         boolean isJvmStaticInObjectOrClass = CodegenUtilKt.isJvmStaticInObjectOrClassOrInterface(functionDescriptor);
         boolean hasDispatchReceiver = !isStaticDeclaration(functionDescriptor) &&
                                       !isNonDefaultInterfaceMember(functionDescriptor) &&
-                                      !isJvmStaticInObjectOrClass;
+                                      !isJvmStaticInObjectOrClass &&
+                                      !InlineClassesUtilsKt.isInlineClass(functionDescriptor.getContainingDeclaration());
         boolean accessorIsConstructor = accessorDescriptor instanceof AccessorForConstructorDescriptor;
 
+        ReceiverParameterDescriptor dispatchReceiver = functionDescriptor.getDispatchReceiverParameter();
+        Type dispatchReceiverType = dispatchReceiver != null && !accessorIsConstructor
+                                    ? typeMapper.mapType(dispatchReceiver.getType())
+                                    : AsmTypes.OBJECT_TYPE;
+
         int accessorParam = (hasDispatchReceiver && !accessorIsConstructor) ? 1 : 0;
-        int reg = hasDispatchReceiver ? 1 : 0;
+        int reg = hasDispatchReceiver ? dispatchReceiverType.getSize() : 0;
         if (!accessorIsConstructor && functionDescriptor instanceof ConstructorDescriptor) {
             iv.anew(callableMethod.getOwner());
             iv.dup();
@@ -881,7 +894,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
         }
         else if (KotlinTypeMapper.isAccessor(accessorDescriptor) && (hasDispatchReceiver || accessorIsConstructor)) {
             if (!isJvmStaticInObjectOrClass) {
-                iv.load(0, OBJECT_TYPE);
+                iv.load(0, dispatchReceiverType);
             }
         }
 

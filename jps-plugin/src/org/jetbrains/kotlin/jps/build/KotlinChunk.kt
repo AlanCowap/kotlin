@@ -9,7 +9,7 @@ import org.jetbrains.jps.incremental.ModuleBuildTarget
 import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.config.LanguageVersion
 import org.jetbrains.kotlin.config.VersionView
-import org.jetbrains.kotlin.incremental.storage.version.CacheStatus
+import org.jetbrains.kotlin.jps.incremental.CacheStatus
 import org.jetbrains.kotlin.jps.incremental.JpsIncrementalCache
 import org.jetbrains.kotlin.jps.incremental.getKotlinCache
 import org.jetbrains.kotlin.jps.model.kotlinCompilerArguments
@@ -37,14 +37,10 @@ class KotlinChunk internal constructor(val context: KotlinCompileContext, val ta
     val representativeTarget
         get() = targets.first()
 
-    private val presentableModulesToCompilersList: String
+    val presentableModulesToCompilersList: String
         get() = targets.joinToString { "${it.module.name} (${it.globalLookupCacheId})" }
 
-    init {
-        check(targets.all { it.javaClass == representativeTarget.javaClass }) {
-            "Cyclically dependent modules $presentableModulesToCompilersList should have same compiler."
-        }
-    }
+    val haveSameCompiler = targets.all { it.javaClass == representativeTarget.javaClass }
 
     private val defaultLanguageVersion = VersionView.RELEASED_VERSION
 
@@ -96,7 +92,7 @@ class KotlinChunk internal constructor(val context: KotlinCompileContext, val ta
         context.ensureLookupsCacheAttributesSaved()
 
         targets.forEach {
-            it.initialLocalCacheAttributesDiff.saveExpectedIfNeeded()
+            it.initialLocalCacheAttributesDiff.manager.writeVersion()
         }
 
         val serializedMetaInfo = representativeTarget.buildMetaInfoFactory.serializeToString(compilerArguments)

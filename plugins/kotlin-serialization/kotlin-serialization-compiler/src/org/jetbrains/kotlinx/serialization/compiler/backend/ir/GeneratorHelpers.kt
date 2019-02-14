@@ -8,6 +8,7 @@ package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -22,17 +23,32 @@ import org.jetbrains.kotlin.ir.symbols.IrValueParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.toKotlinType
+import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializableProperty
+import org.jetbrains.kotlin.types.KotlinTypeFactory
+import org.jetbrains.kotlin.types.TypeProjectionImpl
+import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
+import org.jetbrains.kotlinx.serialization.compiler.backend.common.findTypeSerializerOrContext
+import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.contextSerializerId
+import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.enumSerializerId
+import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.referenceArraySerializerId
+import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 
 val BackendContext.externalSymbols: ReferenceSymbolTable get() = ir.symbols.externalSymbolTable
 
 internal fun BackendContext.createTypeTranslator(moduleDescriptor: ModuleDescriptor): TypeTranslator =
-        TypeTranslator(externalSymbols, irBuiltIns.languageVersionSettings).apply {
-            constantValueGenerator = ConstantValueGenerator(moduleDescriptor, symbolTable = externalSymbols)
-        }
+    TypeTranslator(externalSymbols, irBuiltIns.languageVersionSettings).apply {
+        constantValueGenerator = ConstantValueGenerator(moduleDescriptor, symbolTable = externalSymbols)
+        constantValueGenerator.typeTranslator = this
+    }
 
 interface IrBuilderExtension {
     val compilerContext: BackendContext
@@ -40,18 +56,31 @@ interface IrBuilderExtension {
 
     val BackendContext.localSymbolTable: SymbolTable
 
+    private fun IrClass.declareSimpleFunctionWithExternalOverrides(descriptor: FunctionDescriptor): IrSimpleFunction {
+        return compilerContext.localSymbolTable.declareSimpleFunction(startOffset, endOffset, SERIALIZABLE_PLUGIN_ORIGIN, descriptor).also {f ->
+            descriptor.overriddenDescriptors.mapTo(f.overriddenSymbols) {
+                compilerContext.externalSymbols.referenceSimpleFunction(it.original)
+            }
+        }
+    }
+
     fun IrClass.contributeFunction(descriptor: FunctionDescriptor, fromStubs: Boolean = false, bodyGen: IrBlockBodyBuilder.(IrFunction) -> Unit) {
-        val f: IrSimpleFunction = if (!fromStubs) compilerContext.localSymbolTable.declareSimpleFunctionWithOverrides(
-            this.startOffset,
-            this.endOffset,
-            SERIALIZABLE_PLUGIN_ORIGIN,
+        val f: IrSimpleFunction = if (!fromStubs) declareSimpleFunctionWithExternalOverrides(
             descriptor
         ) else compilerContext.externalSymbols.referenceSimpleFunction(descriptor).owner
         f.parent = this
         f.returnType = descriptor.returnType!!.toIrType()
-        f.createParameterDeclarations()
+        if (!fromStubs) f.createParameterDeclarations(this.thisReceiver)
         f.body = compilerContext.createIrBuilder(f.symbol).irBlockBody { bodyGen(f) }
         this.addMember(f)
+    }
+
+    fun IrClass.contributeCtor(descriptor: ClassConstructorDescriptor, bodyGen: IrBlockBodyBuilder.(IrFunction) -> Unit) {
+        val c = compilerContext.externalSymbols.referenceConstructor(descriptor).owner
+        c.parent = this
+        c.returnType = descriptor.returnType.toIrType()
+        c.body = compilerContext.createIrBuilder(c.symbol).irBlockBody { bodyGen(c) }
+        this.addMember(c)
     }
 
     fun IrClass.contributeConstructor(
@@ -81,6 +110,20 @@ interface IrBuilderExtension {
         call.dispatchReceiver = dispatchReceiver
         args.forEachIndexed(call::putValueArgument)
         return call
+    }
+
+    fun IrBuilderWithScope.createArrayOfExpression(
+            arrayElementType: IrType,
+            arrayElements: List<IrExpression>
+    ): IrExpression {
+
+        val arrayType = compilerContext.ir.symbols.array.typeWith(arrayElementType)
+        val arg0 = IrVarargImpl(startOffset, endOffset, arrayType, arrayElementType, arrayElements)
+        val typeArguments = listOf(arrayElementType)
+
+        return irCall(compilerContext.ir.symbols.arrayOf, arrayType, typeArguments = typeArguments).apply {
+            putValueArgument(0, arg0)
+        }
     }
 
     fun IrBuilderWithScope.irBinOp(name: Name, lhs: IrExpression, rhs: IrExpression): IrExpression {
@@ -155,11 +198,6 @@ interface IrBuilderExtension {
 
 
     val SerializableProperty.irField: IrField get() = compilerContext.externalSymbols.referenceField(this.descriptor).owner
-//        get () {
-//            val symb = compilerContext.localSymbolTable.referenceField(this.descriptor)
-//            return if (symb.isBound) symb.owner
-//            else compilerContext.localSymbolTable.declareField()
-//        }
 
     /*
      The rest of the file is mainly copied from FunctionGenerator.
@@ -215,10 +253,10 @@ interface IrBuilderExtension {
         fieldSymbol: IrFieldSymbol,
         ownerSymbol: IrValueSymbol
     ): IrSimpleFunction {
-        return compilerContext.localSymbolTable.declareSimpleFunctionWithOverrides(
-            UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-            SERIALIZABLE_PLUGIN_ORIGIN, descriptor
-        ).buildWithScope { irAccessor ->
+        // Declaration can also be called from user code. Since we lookup descriptor getter in externalSymbols
+        // (see generateSave/generateLoad), seems it is correct approach to declare getter lazily there.
+        val declaration = compilerContext.externalSymbols.referenceSimpleFunction(descriptor).owner
+        return declaration.buildWithScope { irAccessor ->
             irAccessor.createParameterDeclarations((ownerSymbol as IrValueParameterSymbol).owner) // todo: neat this
             irAccessor.returnType = irAccessor.descriptor.returnType!!.toIrType()
             irAccessor.body = when (descriptor) {
@@ -227,7 +265,6 @@ interface IrBuilderExtension {
                 else -> throw AssertionError("Should be getter or setter: $descriptor")
             }
         }
-
     }
 
     private fun generateDefaultGetterBody(
@@ -325,6 +362,131 @@ interface IrBuilderExtension {
             ).also { typeParameter ->
                 typeParameter.parent = this
             }
+        }
+    }
+
+
+
+    fun IrBuilderWithScope.classReference(classType: KotlinType): IrClassReference {
+        val clazz = classType.toClassDescriptor!!
+        val kClass = clazz.module.findClassAcrossModuleDependencies(ClassId(FqName("kotlin.reflect"), Name.identifier("KClass")))!!
+        val returnType = KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, kClass, listOf(TypeProjectionImpl(Variance.INVARIANT, classType)))
+        return IrClassReferenceImpl(
+            startOffset,
+            endOffset,
+            returnType.toIrType(),
+            compilerContext.externalSymbols.referenceClassifier(clazz),
+            classType.toIrType()
+        )
+    }
+
+    fun buildInitializersRemapping(irClass: IrClass): (IrField) -> IrExpression? {
+        val original = irClass.constructors.singleOrNull { it.isPrimary }
+            ?: throw IllegalStateException("Serializable class must have single primary constructor")
+        // default arguments of original constructor
+        val defaultsMap: Map<ParameterDescriptor, IrExpression?> =
+            original.valueParameters.associate { it.descriptor to it.defaultValue?.expression }
+        return fun(f: IrField): IrExpression? {
+            val i = f.initializer?.expression ?: return null
+            return if (i is IrGetValueImpl && i.origin == IrStatementOrigin.INITIALIZE_PROPERTY_FROM_PARAMETER) {
+                // this is a primary constructor property, use corresponding default of value parameter
+                defaultsMap.getValue(i.descriptor as ParameterDescriptor)
+            } else {
+                i
+            }
+        }
+    }
+
+    fun findEnumValuesMethod(enumClass: ClassDescriptor): IrFunction {
+        assert(enumClass.kind == ClassKind.ENUM_CLASS)
+        return compilerContext.externalSymbols.referenceClass(enumClass).owner.functions
+            .find { it.origin == IrDeclarationOrigin.ENUM_CLASS_SPECIAL_MEMBER && it.name == Name.identifier("values") }
+            ?: throw AssertionError("Enum class does not have .values() function")
+    }
+
+    private fun getEnumMembersNames(enumClass: ClassDescriptor): Sequence<String> {
+        assert(enumClass.kind == ClassKind.ENUM_CLASS)
+        return enumClass.unsubstitutedMemberScope.getContributedDescriptors().asSequence()
+            .filterIsInstance<ClassDescriptor>()
+            .filter { it.kind == ClassKind.ENUM_ENTRY }
+            .map { it.name.toString() }
+    }
+
+    // Does not use sti and therefore does not perform encoder calls optimization
+    fun IrBuilderWithScope.serializerTower(generator: SerializerIrGenerator, property: SerializableProperty): IrExpression? {
+        val nullableSerClass =
+                compilerContext.externalSymbols.referenceClass(property.module.getClassFromInternalSerializationPackage(SpecialBuiltins.nullableSerializer))
+        val serializer =
+                property.serializableWith?.toClassDescriptor
+                        ?: if (!property.type.isTypeParameter()) generator.findTypeSerializerOrContext(
+                                property.module,
+                                property.type,
+                                property.descriptor.annotations,
+                                property.descriptor.findPsi()
+                        ) else null
+        return serializerInstance(generator, generator.serializableDescriptor, serializer, property.module, property.type, property.genericIndex)
+                ?.let { expr -> if (property.type.isMarkedNullable) irInvoke(null, nullableSerClass.constructors.toList()[0], expr) else expr }
+    }
+
+    fun IrBuilderWithScope.serializerInstance(
+        enclosingGenerator: SerializerIrGenerator,
+        serializableDescriptor: ClassDescriptor,
+        serializerClassOriginal: ClassDescriptor?,
+        module: ModuleDescriptor,
+        kType: KotlinType,
+        genericIndex: Int? = null
+    ): IrExpression? {
+        val nullableSerClass =
+            compilerContext.externalSymbols.referenceClass(module.getClassFromInternalSerializationPackage(SpecialBuiltins.nullableSerializer))
+        if (serializerClassOriginal == null) {
+            if (genericIndex == null) return null
+            val thiz = enclosingGenerator.irClass.thisReceiver!!
+            val prop = enclosingGenerator.localSerializersFieldsDescriptors[genericIndex]
+            return irGetField(irGet(thiz), compilerContext.localSymbolTable.referenceField(prop).owner)
+        }
+        if (serializerClassOriginal.kind == ClassKind.OBJECT) {
+            return irGetObject(serializerClassOriginal)
+        } else {
+            var serializerClass = serializerClassOriginal
+            var args: List<IrExpression> = when (serializerClassOriginal.classId) {
+                contextSerializerId -> listOf(classReference(kType))
+                enumSerializerId -> {
+                    serializerClass = serializableDescriptor.getClassFromInternalSerializationPackage("CommonEnumSerializer")
+                    kType.toClassDescriptor!!.let { enumDesc ->
+                        listOf(
+                            irString(enumDesc.name.toString()),
+                            irCall(findEnumValuesMethod(enumDesc)),
+                            createArrayOfExpression(
+                                compilerContext.irBuiltIns.stringType,
+                                getEnumMembersNames(enumDesc).map { irString(it) }.toList()
+                            )
+                        )
+                    }
+                }
+                else -> kType.arguments.map {
+                    val argSer = enclosingGenerator.findTypeSerializerOrContext(module, it.type, sourceElement = serializerClassOriginal.findPsi())
+                    val expr = serializerInstance(enclosingGenerator, serializableDescriptor, argSer, module, it.type, it.type.genericIndex)
+                        ?: return null
+                    if (it.type.isMarkedNullable) irInvoke(null, nullableSerClass.constructors.toList()[0], expr) else expr
+                }
+            }
+            if (serializerClassOriginal.classId == referenceArraySerializerId)
+                args = listOf(classReference(kType.arguments[0].type)) + args
+
+            val serializable = getSerializableClassDescriptorBySerializer(serializerClass)
+            val ctor = if (serializable?.declaredTypeParameters?.isNotEmpty() == true) {
+                requireNotNull(
+                    KSerializerDescriptorResolver.findSerializerConstructorForTypeArgumentsSerializers(serializerClass)
+                ) { "Generated serializer does not have constructor with required number of arguments" }
+                    .let { compilerContext.externalSymbols.referenceConstructor(it) }
+            } else {
+                compilerContext.externalSymbols.referenceConstructor(serializerClass.unsubstitutedPrimaryConstructor!!)
+            }
+            return irInvoke(
+                null,
+                ctor,
+                *args.toTypedArray()
+            )
         }
     }
 }

@@ -5,8 +5,6 @@
 
 package org.jetbrains.kotlin.backend.jvm.codegen
 
-import org.jetbrains.kotlin.backend.common.lower.DECLARATION_ORIGIN_FUNCTION_FOR_DEFAULT_PARAMETER
-import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.descriptors.JvmDescriptorWithExtraFlags
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns.FQ_NAMES
 import org.jetbrains.kotlin.codegen.*
@@ -48,9 +46,7 @@ open class FunctionCodegen(private val irFunction: IrFunction, private val class
         val flags = calculateMethodFlags(irFunction.isStatic)
         val methodVisitor = createMethod(flags, signature)
 
-        AnnotationCodegen.forMethod(methodVisitor, classCodegen, state.typeMapper).genAnnotations(
-            descriptor, signature.asmMethod.returnType
-        )
+        AnnotationCodegen.forMethod(methodVisitor, classCodegen, state).genAnnotations(descriptor, signature.asmMethod.returnType)
         FunctionCodegen.generateParameterAnnotations(descriptor, methodVisitor, signature, classCodegen, state)
 
         if (!state.classBuilderMode.generateBodies || flags.and(Opcodes.ACC_ABSTRACT) != 0 || irFunction.isExternal) {
@@ -64,7 +60,7 @@ open class FunctionCodegen(private val irFunction: IrFunction, private val class
     }
 
     private fun calculateMethodFlags(isStatic: Boolean): Int {
-        if (irFunction.origin == DECLARATION_ORIGIN_FUNCTION_FOR_DEFAULT_PARAMETER) {
+        if (irFunction.origin == IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER) {
             return Opcodes.ACC_PUBLIC or Opcodes.ACC_SYNTHETIC.let {
                 if (irFunction is IrConstructor) it else it or Opcodes.ACC_BRIDGE or Opcodes.ACC_STATIC
             }
@@ -76,12 +72,12 @@ open class FunctionCodegen(private val irFunction: IrFunction, private val class
         val deprecation = if (irFunction.hasAnnotation(FQ_NAMES.deprecated)) Opcodes.ACC_DEPRECATED else 0
         val bridgeFlag = 0 //TODO
         val modalityFlag = when ((irFunction as? IrSimpleFunction)?.modality) {
-            Modality.FINAL -> if (!classCodegen.irClass.isAnnotationClass) Opcodes.ACC_FINAL else Opcodes.ACC_ABSTRACT
+            Modality.FINAL -> if (!classCodegen.irClass.isAnnotationClass || irFunction.isStatic) Opcodes.ACC_FINAL else Opcodes.ACC_ABSTRACT
             Modality.ABSTRACT -> Opcodes.ACC_ABSTRACT
             else -> if (classCodegen.irClass.isJvmInterface && irFunction.body == null) Opcodes.ACC_ABSTRACT else 0 //TODO transform interface modality on lowering to DefaultImpls
         }
         val nativeFlag = if (irFunction.isExternal) Opcodes.ACC_NATIVE else 0
-        val syntheticFlag = if (irFunction.origin == JvmLoweredDeclarationOrigin.SYNTHETIC_ACCESSOR) Opcodes.ACC_SYNTHETIC else 0
+        val syntheticFlag = if (irFunction.origin.isSynthetic) Opcodes.ACC_SYNTHETIC else 0
         return visibility or
                 modalityFlag or
                 staticFlag or
@@ -113,7 +109,7 @@ open class FunctionCodegen(private val irFunction: IrFunction, private val class
                 )
                 assert(!state.classBuilderMode.generateBodies || constant != null) { "Default value for annotation parameter should be compile time value: " + defaultValue.text }
                 if (constant != null) {
-                    val annotationCodegen = AnnotationCodegen.forAnnotationDefaultValue(methodVisitor, classCodegen, state.typeMapper)
+                    val annotationCodegen = AnnotationCodegen.forAnnotationDefaultValue(methodVisitor, classCodegen, state)
                     annotationCodegen.generateAnnotationDefaultValue(constant, descriptor.returnType!!)
                 }
             }

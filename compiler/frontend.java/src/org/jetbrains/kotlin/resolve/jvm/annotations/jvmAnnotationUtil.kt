@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.descriptors.deserialization.PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.load.java.JvmAbi.JVM_FIELD_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -27,6 +28,9 @@ val STRICTFP_ANNOTATION_FQ_NAME = FqName("kotlin.jvm.Strictfp")
 @JvmField
 val VOLATILE_ANNOTATION_FQ_NAME = FqName("kotlin.jvm.Volatile")
 
+@JvmField
+val TRANSIENT_ANNOTATION_FQ_NAME = FqName("kotlin.jvm.Transient")
+
 fun DeclarationDescriptor.findJvmOverloadsAnnotation(): AnnotationDescriptor? =
     annotations.findAnnotation(JVM_OVERLOADS_FQ_NAME)
 
@@ -41,6 +45,9 @@ fun DeclarationDescriptor.isCallableMemberWithJvmDefaultAnnotation(): Boolean =
 
 fun CallableMemberDescriptor.hasJvmDefaultAnnotation(): Boolean =
     DescriptorUtils.getDirectMember(this).annotations.hasAnnotation(JVM_DEFAULT_FQ_NAME)
+
+fun CallableMemberDescriptor.hasPlatformDependentAnnotation(): Boolean =
+    DescriptorUtils.getDirectMember(this).annotations.hasAnnotation(PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME)
 
 private fun Annotated.findJvmSyntheticAnnotation(): AnnotationDescriptor? =
     annotations.findAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME)

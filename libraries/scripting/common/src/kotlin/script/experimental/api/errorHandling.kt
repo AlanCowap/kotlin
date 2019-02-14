@@ -17,6 +17,7 @@ package kotlin.script.experimental.api
 data class ScriptDiagnostic(
     val message: String,
     val severity: Severity = Severity.ERROR,
+    val sourcePath: String? = null,
     val location: SourceCode.Location? = null,
     val exception: Throwable? = null
 ) {
@@ -59,18 +60,41 @@ sealed class ResultWithDiagnostics<out R> {
  * If receiver is success - executes [body] and merge diagnostic reports
  * otherwise returns the failure as is
  */
-suspend fun <R1, R2> ResultWithDiagnostics<R1>.onSuccess(body: suspend (R1) -> ResultWithDiagnostics<R2>): ResultWithDiagnostics<R2> =
+inline fun <R1, R2> ResultWithDiagnostics<R1>.onSuccess(body: (R1) -> ResultWithDiagnostics<R2>): ResultWithDiagnostics<R2> =
     when (this) {
         is ResultWithDiagnostics.Success -> this.reports + body(this.value)
         is ResultWithDiagnostics.Failure -> this
     }
 
 /**
+ * maps transformation ([body]) over iterable merging diagnostics
+ * return failure with merged diagnostics after first failed transformation
+ * and success with merged diagnostics and list of results if all transformations succeeded
+ */
+inline fun<T, R> Iterable<T>.mapSuccess(body: (T) -> ResultWithDiagnostics<R>): ResultWithDiagnostics<List<R>> {
+    val reports = ArrayList<ScriptDiagnostic>()
+    val results = ArrayList<R>()
+    for (it in this) {
+        val result = body(it)
+        reports.addAll(result.reports)
+        when (result) {
+            is ResultWithDiagnostics.Success -> {
+                results.add(result.value)
+            }
+            else -> {
+                return ResultWithDiagnostics.Failure(reports)
+            }
+        }
+    }
+    return results.asSuccess(reports)
+}
+
+/**
  * Chains actions on failure:
  * If receiver is failure - executed [body]
  * otherwise returns the receiver as is
  */
-suspend fun <R> ResultWithDiagnostics<R>.onFailure(body: suspend (ResultWithDiagnostics<R>) -> Unit): ResultWithDiagnostics<R> {
+inline fun <R> ResultWithDiagnostics<R>.onFailure(body: (ResultWithDiagnostics<R>) -> Unit): ResultWithDiagnostics<R> {
     if (this is ResultWithDiagnostics.Failure) {
         body(this)
     }
@@ -92,21 +116,25 @@ fun <R> R.asSuccess(reports: List<ScriptDiagnostic> = listOf()): ResultWithDiagn
     ResultWithDiagnostics.Success(this, reports)
 
 /**
- * Converts the receiver Throwable to the Failure results wrapper with optional [message] and [location]
+ * Converts the receiver Throwable to the Failure results wrapper with optional [customMessage], [path] and [location]
  */
-fun Throwable.asDiagnostics(customMessage: String? = null, location: SourceCode.Location? = null): ScriptDiagnostic =
-    ScriptDiagnostic(customMessage ?: message ?: "$this", ScriptDiagnostic.Severity.ERROR, location, this)
+fun Throwable.asDiagnostics(
+    customMessage: String? = null,
+    path: String? = null,
+    location: SourceCode.Location? = null
+): ScriptDiagnostic =
+    ScriptDiagnostic(customMessage ?: message ?: "$this", ScriptDiagnostic.Severity.ERROR, path, location, this)
 
 /**
- * Converts the receiver String to error diagnostic report with optional [location]
+ * Converts the receiver String to error diagnostic report with optional [path] and [location]
  */
-fun String.asErrorDiagnostics(location: SourceCode.Location? = null): ScriptDiagnostic =
-    ScriptDiagnostic(this, ScriptDiagnostic.Severity.ERROR, location)
+fun String.asErrorDiagnostics(path: String? = null, location: SourceCode.Location? = null): ScriptDiagnostic =
+    ScriptDiagnostic(this, ScriptDiagnostic.Severity.ERROR, path, location)
 
 /**
  * Extracts the result value from the receiver wrapper or null if receiver represents a Failure
  */
-fun<R> ResultWithDiagnostics<R>.resultOrNull(): R? = when (this) {
+fun <R> ResultWithDiagnostics<R>.resultOrNull(): R? = when (this) {
     is ResultWithDiagnostics.Success<R> -> value
     else -> null
 }

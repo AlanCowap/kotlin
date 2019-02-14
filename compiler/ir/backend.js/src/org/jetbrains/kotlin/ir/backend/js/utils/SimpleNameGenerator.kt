@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.ir.backend.js.utils
 
+import org.jetbrains.kotlin.backend.common.ir.isTopLevel
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrLoop
@@ -13,12 +14,15 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.util.isDynamic
 import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
-import org.jetbrains.kotlin.ir.util.render
+import org.jetbrains.kotlin.ir.util.isInlined
+import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.js.backend.ast.JsName
 import org.jetbrains.kotlin.js.naming.isES5IdentifierPart
 import org.jetbrains.kotlin.js.naming.isES5IdentifierStart
 import org.jetbrains.kotlin.resolve.calls.tasks.isDynamic
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
+import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedClassDescriptor
+import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
 
 // TODO: this class has to be reimplemented soon
 class SimpleNameGenerator : NameGenerator {
@@ -97,14 +101,26 @@ class SimpleNameGenerator : NameGenerator {
                 return@getOrPut nameDeclarator(declaration.descriptor.name.asString())
             }
 
+            val jsName = declaration.getJsName()
+            if (jsName != null) {
+                return@getOrPut context.currentScope.declareName(jsName)
+            }
+
             if (declaration.isEffectivelyExternal()) {
                 // TODO: descriptors are still used here due to the corresponding declaration doesn't have enough information yet
-                val descriptorForName = when (descriptor) {
+                val descriptorName = when (descriptor) {
                     is ConstructorDescriptor -> descriptor.constructedClass
                     is PropertyAccessorDescriptor -> descriptor.correspondingProperty
                     else -> descriptor
+                }.name
+
+                if (declaration is IrConstructor) return@getOrPut getNameForDeclaration(declaration.parentAsClass, context)
+
+                if (declaration is IrClass && declaration.parent is IrClass) {
+                    val parentName = getNameForDeclaration(declaration.parentAsClass, context).ident
+                    return@getOrPut context.currentScope.declareFreshName(parentName + "$" + descriptorName.identifier)
                 }
-                return@getOrPut context.staticContext.rootScope.declareName(descriptorForName.name.asString())
+                return@getOrPut context.staticContext.rootScope.declareName(descriptorName.identifier)
             }
 
             when (declaration) {
@@ -127,9 +143,12 @@ class SimpleNameGenerator : NameGenerator {
                 }
                 is IrField -> {
                     nameBuilder.append(declaration.name.asString())
-                    if (declaration.parent is IrDeclaration) {
+                    if (declaration.isTopLevel) {
+                        nameDeclarator = context.staticContext.rootScope::declareFreshName
+                    } else {
                         nameBuilder.append('.')
                         nameBuilder.append(getNameForDeclaration(declaration.parent as IrDeclaration, context))
+                        if (declaration.visibility == Visibilities.PRIVATE) nameDeclarator = context.currentScope::declareFreshName
                     }
                 }
                 is IrClass -> {
@@ -147,7 +166,10 @@ class SimpleNameGenerator : NameGenerator {
 
 
                     if (declaration.kind == ClassKind.OBJECT || declaration.name.isSpecial || declaration.visibility == Visibilities.LOCAL) {
-                        nameDeclarator = context.staticContext.rootScope::declareFreshName
+                        if (declaration.descriptor !is DeserializedClassDescriptor) {
+                            // TODO: temporary workaround for Unit instance
+                            nameDeclarator = context.staticContext.rootScope::declareFreshName
+                        }
                         val parent = declaration.parent
                         when (parent) {
                             is IrDeclaration -> nameBuilder.append(getNameForDeclaration(parent, context))
@@ -172,10 +194,33 @@ class SimpleNameGenerator : NameGenerator {
                 }
                 is IrSimpleFunction -> {
 
+                    if (declaration.isStaticMethodOfClass) {
+                        nameBuilder.append(getNameForDeclaration(declaration.parent as IrDeclaration, context))
+                        nameBuilder.append('.')
+                    }
+                    if (declaration.dispatchReceiverParameter == null) {
+                        nameDeclarator = context.staticContext.rootScope::declareFreshName
+                    }
+
                     nameBuilder.append(declaration.name.asString())
-                    declaration.extensionReceiverParameter?.let { nameBuilder.append("_\$${it.type.render()}") }
-                    declaration.typeParameters.forEach { nameBuilder.append("_${it.name.asString()}") }
-                    declaration.valueParameters.forEach { nameBuilder.append("_${it.type.render()}") }
+                    // TODO should we skip type parameters and use upper bound of type parameter when print type of value parameters?
+                    declaration.typeParameters.ifNotEmpty {
+                        nameBuilder.append("_\$t")
+                        joinTo(nameBuilder, "") { "_${it.name.asString()}" }
+                    }
+                    declaration.extensionReceiverParameter?.let {
+                        nameBuilder.append("_r$${it.type.asString()}")
+                    }
+                    declaration.valueParameters.ifNotEmpty {
+                        joinTo(nameBuilder, "") { "_${it.type.asString()}" }
+                    }
+                    declaration.returnType.let {
+                        // Return type is only used in signature for inline class types because
+                        // they are binary incompatible with supertypes.
+                        if (it.isInlined()) {
+                            nameBuilder.append("_ret$${it.asString()}")
+                        }
+                    }
                 }
 
             }
@@ -187,12 +232,11 @@ class SimpleNameGenerator : NameGenerator {
 
             nameDeclarator(sanitizeName(nameBuilder.toString()))
         }
+}
 
+fun sanitizeName(name: String): String {
+    if (name.isEmpty()) return "_"
 
-    private fun sanitizeName(name: String): String {
-        if (name.isEmpty()) return "_"
-
-        val first = name.first().let { if (it.isES5IdentifierStart()) it else '_' }
-        return first.toString() + name.drop(1).map { if (it.isES5IdentifierPart()) it else '_' }.joinToString("")
-    }
+    val first = name.first().let { if (it.isES5IdentifierStart()) it else '_' }
+    return first.toString() + name.drop(1).map { if (it.isES5IdentifierPart()) it else '_' }.joinToString("")
 }

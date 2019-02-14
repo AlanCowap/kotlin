@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.backend.jvm.codegen
 
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
-import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.descriptors.JvmDescriptorWithExtraFlags
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
@@ -37,6 +36,7 @@ import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
+import java.io.File
 import java.lang.RuntimeException
 
 open class ClassCodegen protected constructor(
@@ -64,11 +64,15 @@ open class ClassCodegen protected constructor(
 
     private val fileEntry = sourceManager.getFileEntry(irClass.fileParent)
 
-    val psiElement = irClass.descriptor.psiElement!!
+    val psiElement = irClass.descriptor.psiElement
 
     val visitor: ClassBuilder = createClassBuilder()
 
-    open fun createClassBuilder() = state.factory.newVisitor(OtherOrigin(psiElement, descriptor), type, psiElement.containingFile)
+    open fun createClassBuilder() = state.factory.newVisitor(
+        OtherOrigin(psiElement, descriptor),
+        type,
+        psiElement?.containingFile?.let { setOf(it) } ?: emptySet()
+    )
 
     private var sourceMapper: DefaultSourceMapper? = null
 
@@ -85,8 +89,10 @@ open class ClassCodegen protected constructor(
             signature.superclassName,
             signature.interfaces.toTypedArray()
         )
-        AnnotationCodegen.forClass(visitor.visitor, this, typeMapper).genAnnotations(descriptor, null)
-        visitor.visitSource(irClass.symbol.descriptor.source.containingFile.name!!, null)
+        AnnotationCodegen.forClass(visitor.visitor, this, context.state).genAnnotations(descriptor, null)
+        /* TODO: Temporary workaround: ClassBuilder needs a pathless name. */
+        val shortName = File(fileEntry.name).name
+        visitor.visitSource(shortName, null)
 
         irClass.declarations.forEach {
             generateDeclaration(it)
@@ -159,8 +165,8 @@ open class ClassCodegen protected constructor(
             fieldSignature, null/*TODO support default values*/
         )
 
-        if (field.origin == JvmLoweredDeclarationOrigin.FIELD_FOR_ENUM_ENTRY) {
-            AnnotationCodegen.forField(fv, this, typeMapper).genAnnotations(field.descriptor, null)
+        if (field.origin == IrDeclarationOrigin.FIELD_FOR_ENUM_ENTRY) {
+            AnnotationCodegen.forField(fv, this, state).genAnnotations(field.descriptor, null)
         } else {
 
         }
@@ -254,7 +260,12 @@ fun MemberDescriptor.calculateCommonFlags(): Int {
 
 private fun MemberDescriptor.calcModalityFlag(): Int {
     var flags = 0
-    when (effectiveModality) {
+    if (this is PropertyDescriptor) {
+        // Modality for a field: set FINAL for vals
+        if (!isVar && !isLateInit) {
+            flags = flags.or(Opcodes.ACC_FINAL)
+        }
+    } else when (effectiveModality) {
         Modality.ABSTRACT -> {
             flags = flags.or(Opcodes.ACC_ABSTRACT)
         }
@@ -279,14 +290,8 @@ private fun MemberDescriptor.calcModalityFlag(): Int {
 
 private val MemberDescriptor.effectiveModality: Modality
     get() {
-        if (this is ClassDescriptor && kind == ClassKind.ENUM_CLASS) {
-            if (JvmCodegenUtil.hasAbstractMembers(this)) {
-                return Modality.ABSTRACT
-            }
-        }
         if (DescriptorUtils.isSealedClass(this) ||
-            DescriptorUtils.isAnnotationClass(this) ||
-            DescriptorUtils.isAnnotationClass(this.containingDeclaration)
+            DescriptorUtils.isAnnotationClass(this)
         ) {
             return Modality.ABSTRACT
         }

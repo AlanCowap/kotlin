@@ -1,25 +1,16 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
 import org.jetbrains.kotlin.backend.common.ClassLoweringPass
 import org.jetbrains.kotlin.backend.common.bridges.FunctionHandle
+import org.jetbrains.kotlin.backend.common.bridges.findInterfaceImplementation
 import org.jetbrains.kotlin.backend.common.bridges.generateBridges
 import org.jetbrains.kotlin.backend.common.ir.copyTo
+import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.backend.common.ir.isSuspend
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlockBody
@@ -27,7 +18,7 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
-import org.jetbrains.kotlin.ir.backend.js.transformers.irToJs.isStatic
+import org.jetbrains.kotlin.ir.backend.js.utils.asString
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
@@ -35,10 +26,10 @@ import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrNull
 import org.jetbrains.kotlin.ir.types.isUnit
+import org.jetbrains.kotlin.ir.util.isInlined
 import org.jetbrains.kotlin.ir.util.isInterface
 import org.jetbrains.kotlin.ir.util.isReal
 import org.jetbrains.kotlin.ir.util.parentAsClass
-import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 
@@ -67,13 +58,8 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
         irClass.declarations
             .asSequence()
             .filterIsInstance<IrSimpleFunction>()
-            .filter { !it.isStatic }
+            .filter { !it.isStaticMethodOfClass }
             .toList()
-            .forEach { generateBridges(it, irClass) }
-
-        irClass.declarations
-            .filterIsInstance<IrProperty>()
-            .flatMap { listOfNotNull(it.getter, it.setter) }
             .forEach { generateBridges(it, irClass) }
     }
 
@@ -88,9 +74,6 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
         )
 
         for ((from, to) in bridgesToGenerate) {
-            if (to.function.visibility == Visibilities.INVISIBLE_FAKE)
-                continue
-
             if (!from.function.parentAsClass.isInterface &&
                 from.function.isReal &&
                 from.function.modality != Modality.ABSTRACT &&
@@ -103,6 +86,8 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
         }
     }
 
+    private val unitValue = JsIrBuilder.buildGetObjectValue(context.irBuiltIns.unitType, context.irBuiltIns.unitClass)
+
     // Ported from from jvm.lower.BridgeLowering
     private fun createBridge(
         function: IrSimpleFunction,
@@ -113,6 +98,8 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
         // TODO: Support offsets for debug info
         val irFunction = JsIrBuilder.buildFunction(
             bridge.name,
+            bridge.returnType,
+            function.parent,
             bridge.visibility,
             bridge.modality, // TODO: should copy modality?
             bridge.isInline,
@@ -127,11 +114,10 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
                 IrValueParameterImpl(startOffset, endOffset, origin, descriptor, type, varargElementType).also { it.parent = this@apply }
             }
             extensionReceiverParameter = bridge.extensionReceiverParameter?.copyTo(this)
-            typeParameters += bridge.typeParameters
+            copyTypeParametersFrom(bridge)
             valueParameters += bridge.valueParameters.map { p -> p.copyTo(this) }
             annotations += bridge.annotations
-            returnType = bridge.returnType
-            parent = delegateTo.parent
+            overriddenSymbols.addAll(delegateTo.overriddenSymbols)
         }
 
         context.createIrBuilder(irFunction.symbol).irBlockBody(irFunction) {
@@ -146,7 +132,19 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
             irFunction.valueParameters.subList(0, toTake).mapIndexed { i, valueParameter ->
                 call.putValueArgument(i, irCastIfNeeded(irGet(valueParameter), delegateTo.valueParameters[i].type))
             }
-            +irReturn(call)
+
+            // This is required for Unit materialization
+            // TODO: generalize for boxed types and inline classes
+            // TODO: use return type in signature too
+            val returnValue = if (delegateTo.returnType.isUnit() && !function.returnType.isUnit()) {
+                irComposite(resultType = irFunction.returnType) {
+                    +call
+                    +unitValue
+                }
+            } else {
+                call
+            }
+            +irReturn(returnValue)
         }.apply {
             irFunction.body = this
         }
@@ -156,19 +154,19 @@ class BridgesConstruction(val context: JsIrBackendContext) : ClassLoweringPass {
 
     // TODO: get rid of Unit check
     private fun IrBlockBodyBuilder.irCastIfNeeded(argument: IrExpression, type: IrType): IrExpression =
-        if (argument.type.classifierOrNull == type.classifierOrNull || type.isUnit()) argument else irAs(argument, type)
+        if (argument.type.classifierOrNull == type.classifierOrNull) argument else irAs(argument, type)
 }
 
 // Handle for common.bridges
 data class IrBasedFunctionHandle(val function: IrSimpleFunction) : FunctionHandle {
 
-    override val isDeclaration: Boolean = true
+    override val isDeclaration: Boolean = function.isReal || findInterfaceImplementation(function.descriptor) != null
 
     override val isAbstract: Boolean =
         function.modality == Modality.ABSTRACT
 
-    override val isInterfaceDeclaration =
-        function.parentAsClass.isInterface
+    override val mayBeUsedAsSuperImplementation =
+        !function.parentAsClass.isInterface
 
     override fun getOverridden() =
         function.overriddenSymbols.map { IrBasedFunctionHandle(it.owner) }
@@ -184,17 +182,25 @@ class FunctionAndSignature(val function: IrSimpleFunction) {
     private data class Signature(
         val name: Name,
         val extensionReceiverType: String?,
-        val valueParameters: List<String?>
+        val valueParameters: List<String?>,
+        val returnType: String?
     )
 
     private val signature = Signature(
         function.name,
-        function.extensionReceiverParameter?.type?.render(),
-        function.valueParameters.map { it.type.render() }
+        function.extensionReceiverParameter?.type?.asString(),
+        function.valueParameters.map { it.type.asString() },
+        // Return type used in signature for inline classes only because
+        // they are binary incompatible with supertypes and require bridges.
+        function.returnType.run { if (isInlined()) asString() else null }
     )
 
-    override fun equals(other: Any?) =
-        signature == (other as FunctionAndSignature).signature
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is FunctionAndSignature) return false
+
+        return signature == other.signature
+    }
 
     override fun hashCode(): Int = signature.hashCode()
 }

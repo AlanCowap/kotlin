@@ -23,7 +23,6 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinGradleSubplugin
 import org.jetbrains.kotlin.gradle.plugin.SubpluginArtifact
 import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
-import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 
 class SerializationGradleSubplugin : Plugin<Project> {
     companion object {
@@ -42,14 +41,8 @@ class SerializationKotlinGradleSubplugin : KotlinGradleSubplugin<AbstractCompile
         const val SERIALIZATION_ARTIFACT_UNSHADED_NAME = "kotlin-serialization-unshaded"
     }
 
-    private var useUnshaded = false
-
-    override fun isApplicable(project: Project, task: AbstractCompile): Boolean {
-        if (!SerializationGradleSubplugin.isEnabled(project)) return false
-        // Kotlin/Native task is not an AbstractKotlinCompile and uses unshaded compiler
-        if (task !is AbstractKotlinCompile<*>) useUnshaded = true
-        return true
-    }
+    override fun isApplicable(project: Project, task: AbstractCompile): Boolean =
+        SerializationGradleSubplugin.isEnabled(project)
 
     override fun apply(
         project: Project,
@@ -57,16 +50,16 @@ class SerializationKotlinGradleSubplugin : KotlinGradleSubplugin<AbstractCompile
         javaCompile: AbstractCompile?,
         variantData: Any?,
         androidProjectHandler: Any?,
-        kotlinCompilation: KotlinCompilation?
+        kotlinCompilation: KotlinCompilation<*>?
     ): List<SubpluginOption> {
         return emptyList()
     }
 
+    override fun getPluginArtifact(): SubpluginArtifact =
+        SubpluginArtifact(SERIALIZATION_GROUP_NAME, SERIALIZATION_ARTIFACT_NAME)
 
-    override fun getPluginArtifact(): SubpluginArtifact {
-        val artifact = if (useUnshaded) SERIALIZATION_ARTIFACT_UNSHADED_NAME else SERIALIZATION_ARTIFACT_NAME
-        return SubpluginArtifact(SERIALIZATION_GROUP_NAME, artifact)
-    }
+    override fun getNativeCompilerPluginArtifact(): SubpluginArtifact? =
+        SubpluginArtifact(SERIALIZATION_GROUP_NAME, SERIALIZATION_ARTIFACT_UNSHADED_NAME)
 
     override fun getCompilerPluginId() = "org.jetbrains.kotlinx.serialization"
 }

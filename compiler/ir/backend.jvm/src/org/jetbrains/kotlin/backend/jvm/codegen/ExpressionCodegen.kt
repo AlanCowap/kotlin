@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.intrinsics.IrIntrinsicFunction
 import org.jetbrains.kotlin.backend.jvm.intrinsics.IrIntrinsicMethods
 import org.jetbrains.kotlin.backend.jvm.lower.CrIrType
+import org.jetbrains.kotlin.backend.jvm.lower.JvmBuiltinOptimizationLowering.Companion.isNegation
+import org.jetbrains.kotlin.backend.jvm.lower.JvmBuiltinOptimizationLowering.Companion.negationArgument
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.AsmUtil.*
@@ -31,8 +33,12 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.isMarkedNullable
+import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.types.toKotlinType
 import org.jetbrains.kotlin.ir.util.dump
+import org.jetbrains.kotlin.ir.util.isNullConst
 import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -241,6 +247,8 @@ class ExpressionCodegen(
             //coerceNotToUnit(r.type, Type.VOID_TYPE)
             exp.accept(this, data)
         }
+        // Blocks with nothing type do not generate a value on the stack.
+        if (expression.type.isNothing()) return none()
         return coerceNotToUnit(result.type, result.kotlinType, expression.type.toKotlinType())
     }
 
@@ -368,13 +376,12 @@ class ExpressionCodegen(
         if (returnType != null && KotlinBuiltIns.isNothing(returnType)) {
             mv.aconst(null)
             mv.athrow()
-        } else if (expression.descriptor !is ConstructorDescriptor) {
-            return returnType?.run { coerceNotToUnit(callable.returnType, returnType, this) } ?: onStack(callable.returnType, returnType)
-        } else {
+            return expression.onStack
+        } else if (expression.descriptor is ConstructorDescriptor) {
             return none()
         }
 
-        return expression.onStack
+        return coerceNotToUnit(callable.returnType, returnType, expression.type.toKotlinType())
     }
 
     override fun visitInstanceInitializerCall(expression: IrInstanceInitializerCall, data: BlockInfo): StackValue {
@@ -419,7 +426,10 @@ class ExpressionCodegen(
     }
 
     override fun visitGetValue(expression: IrGetValue, data: BlockInfo): StackValue {
-        expression.markLineNumber(startOffset = true)
+        // Do not generate line number information for loads from compiler-generated
+        // temporary variables. They do not correspond to variable loads in user code.
+        if (expression.symbol.owner.origin != IrDeclarationOrigin.IR_TEMPORARY_VARIABLE)
+            expression.markLineNumber(startOffset = true)
         return generateLocal(expression.symbol, expression.asmType)
     }
 
@@ -445,10 +455,52 @@ class ExpressionCodegen(
     }
 
     override fun visitSetField(expression: IrSetField, data: BlockInfo): StackValue {
+        val expressionValue = expression.value
+        if (irFunction is IrConstructor && irFunction.isPrimary) {
+            // Do not add redundant field initializers that initialize to default values.
+            // "expression.origin == null" means that the field is initialized when it is declared,
+            // i.e., not in an initializer block or constructor body.
+            if (expression.origin == null && expressionValue is IrConst<*> && isDefaultValueForType(
+                    expression.symbol.owner.type, expressionValue
+                )
+            ) return none()
+        }
         expression.markLineNumber(startOffset = true)
         val fieldValue = generateFieldValue(expression, data)
-        fieldValue.store(expression.value.accept(this, data), mv)
+        fieldValue.store(expressionValue.accept(this, data), mv)
         return none()
+    }
+
+
+    /**
+     * Returns true if the given constant value is the JVM's default value for the given type.
+     * See: https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3
+     */
+    private fun isDefaultValueForType(fieldType: IrType, constExpression: IrConst<*>): Boolean {
+        val value = constExpression.value
+        val type = constExpression.asmType
+        if (isPrimitive(type)) {
+            if (!fieldType.isMarkedNullable() && value is Number) {
+                if (type in setOf(Type.INT_TYPE, Type.BYTE_TYPE, Type.LONG_TYPE, Type.SHORT_TYPE) && value.toLong() == 0L) {
+                    return true
+                }
+                if (type === Type.DOUBLE_TYPE && value.toDouble().equals(0.0)) {
+                    return true
+                }
+                if (type === Type.FLOAT_TYPE && value.toFloat().equals(0.0f)) {
+                    return true
+                }
+            }
+            if (type === Type.BOOLEAN_TYPE && value is Boolean && !value) {
+                return true
+            }
+            if (type === Type.CHAR_TYPE && value is Char && value.toInt() == 0) {
+                return true
+            }
+        } else if (value == null) {
+            return true
+        }
+        return false
     }
 
     private fun generateLocal(symbol: IrSymbol, type: Type): StackValue {
@@ -629,22 +681,18 @@ class ExpressionCodegen(
         return expression.onStack
     }
 
-
     override fun visitWhen(expression: IrWhen, data: BlockInfo): StackValue {
         expression.markLineNumber(startOffset = true)
         return genIfWithBranches(expression.branches[0], data, expression.type.toKotlinType(), expression.branches.drop(1))
     }
 
-
     private fun genIfWithBranches(branch: IrBranch, data: BlockInfo, type: KotlinType, otherBranches: List<IrBranch>): StackValue {
         val elseLabel = Label()
-        val condition = branch.condition
         val thenBranch = branch.result
         //TODO don't generate condition for else branch - java verifier fails with empty stack
         val elseBranch = branch is IrElseBranch
         if (!elseBranch) {
-            gen(condition, data)
-            BranchedValue.condJump(StackValue.onStack(condition.asmType), elseLabel, true, mv)
+            genConditionWithOptimizationsIfPossible(branch, data, elseLabel)
         }
 
         val end = Label()
@@ -666,6 +714,40 @@ class ExpressionCodegen(
         return result
     }
 
+    private fun genConditionWithOptimizationsIfPossible(branch: IrBranch, data: BlockInfo, elseLabel: Label) {
+        var condition = branch.condition
+        var jumpIfFalse = true
+        if (isNegation(condition, classCodegen.context)) {
+            // Instead of materializing a negated value when used for control flow, flip the branch
+            // targets instead. This significantly cuts down the amount of branches and loads of
+            // const_0 and const_1 in the generated java bytecode.
+            condition = negationArgument(condition as IrCall)
+            jumpIfFalse = false
+        }
+        if (isNullCheck(condition)) {
+            // Do not materialize null constants to check for null. Instead use the JVM bytecode
+            // ifnull and ifnonnull instructions.
+            val call = condition as IrCall
+            val left = call.getValueArgument(0)!!
+            val right = call.getValueArgument(1)!!
+            val other = if (left.isNullConst()) right else left
+            gen(other, data).put(other.asmType, mv)
+            if (jumpIfFalse) {
+                mv.ifnonnull(elseLabel)
+            } else {
+                mv.ifnull(elseLabel)
+            }
+        } else {
+            gen(condition, data).put(condition.asmType, mv)
+            BranchedValue.condJump(onStack(condition.asmType), elseLabel, jumpIfFalse, mv)
+        }
+    }
+
+    private fun isNullCheck(expression: IrExpression): Boolean {
+        return expression is IrCall
+                && expression.symbol == classCodegen.context.irBuiltIns.eqeqSymbol
+                && (expression.getValueArgument(0)!!.isNullConst() || expression.getValueArgument(1)!!.isNullConst())
+    }
 
     override fun visitTypeOperator(expression: IrTypeOperatorCall, data: BlockInfo): StackValue {
         val asmType = expression.typeOperand.toKotlinType().asmType
@@ -1053,16 +1135,16 @@ class ExpressionCodegen(
         } else {
             val classType = classReference.classType
             if (classType is CrIrType) {
-                putJavaLangClassInstance(mv, classType.type)
+                putJavaLangClassInstance(mv, classType.type, null, state)
                 return
             } else {
-                val type = classType.toKotlinType()
-                if (TypeUtils.isTypeParameter(type)) {
-                    assert(TypeUtils.isReifiedTypeParameter(type)) { "Non-reified type parameter under ::class should be rejected by type checker: " + type }
-                    putReifiedOperationMarkerIfTypeIsReifiedParameter(type, ReifiedTypeInliner.OperationKind.JAVA_CLASS, mv, this)
+                val kotlinType = classType.toKotlinType()
+                if (TypeUtils.isTypeParameter(kotlinType)) {
+                    assert(TypeUtils.isReifiedTypeParameter(kotlinType)) { "Non-reified type parameter under ::class should be rejected by type checker: " + kotlinType }
+                    putReifiedOperationMarkerIfTypeIsReifiedParameter(kotlinType, ReifiedTypeInliner.OperationKind.JAVA_CLASS, mv, this)
                 }
 
-                putJavaLangClassInstance(mv, typeMapper.mapType(type))
+                putJavaLangClassInstance(mv, typeMapper.mapType(kotlinType), kotlinType, state)
             }
         }
 

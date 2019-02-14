@@ -26,12 +26,15 @@ import org.jetbrains.kotlin.config.JvmTarget;
 import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
+import org.jetbrains.kotlin.incremental.components.NoLookupLocation;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.load.java.JavaVisibilities;
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil;
 import org.jetbrains.kotlin.metadata.jvm.serialization.JvmStringTable;
-import org.jetbrains.kotlin.name.*;
+import org.jetbrains.kotlin.name.ClassId;
+import org.jetbrains.kotlin.name.FqName;
+import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.protobuf.MessageLite;
 import org.jetbrains.kotlin.renderer.DescriptorRenderer;
 import org.jetbrains.kotlin.resolve.BindingContext;
@@ -39,6 +42,7 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.InlineClassDescriptorResolver;
 import org.jetbrains.kotlin.resolve.InlineClassesUtilsKt;
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker;
+import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
 import org.jetbrains.kotlin.resolve.jvm.*;
 import org.jetbrains.kotlin.resolve.jvm.checkers.DalvikIdentifierUtils;
@@ -61,8 +65,8 @@ import static org.jetbrains.kotlin.builtins.KotlinBuiltIns.isPrimitiveClass;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.isToArrayFromCollection;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.isConstOrHasJvmFieldAnnotation;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.isJvmInterface;
-import static org.jetbrains.kotlin.descriptors.annotations.AnnotationUtilKt.isEffectivelyInlineOnly;
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.*;
+import static org.jetbrains.kotlin.resolve.inline.InlineOnlyKt.isEffectivelyInlineOnly;
 import static org.jetbrains.kotlin.resolve.jvm.AsmTypes.*;
 import static org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt.hasJvmDefaultAnnotation;
 import static org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt.hasJvmSyntheticAnnotation;
@@ -70,6 +74,9 @@ import static org.jetbrains.kotlin.types.TypeUtils.isNullableType;
 import static org.jetbrains.org.objectweb.asm.Opcodes.*;
 
 public class AsmUtil {
+
+    public static final boolean IS_BUILT_WITH_ASM6 = Opcodes.API_VERSION <= Opcodes.ASM6;
+
     private static final Set<Type> STRING_BUILDER_OBJECT_APPEND_ARG_TYPES = Sets.newHashSet(
             getType(String.class),
             getType(StringBuffer.class),
@@ -305,7 +312,11 @@ public class AsmUtil {
     }
 
     public static int getMethodAsmFlags(FunctionDescriptor functionDescriptor, OwnerKind kind, GenerationState state) {
-        int flags = getCommonCallableFlags(functionDescriptor, kind, state);
+        return getMethodAsmFlags(functionDescriptor, kind, state.getDeprecationProvider());
+    }
+
+    public static int getMethodAsmFlags(FunctionDescriptor functionDescriptor, OwnerKind kind, DeprecationResolver deprecationResolver) {
+        int flags = getCommonCallableFlags(functionDescriptor, kind, deprecationResolver);
 
         for (AnnotationCodegen.JvmFlagAnnotation flagAnnotation : AnnotationCodegen.METHOD_FLAGS) {
             flags |= flagAnnotation.getJvmFlag(functionDescriptor.getOriginal());
@@ -355,18 +366,18 @@ public class AsmUtil {
     }
 
     public static int getCommonCallableFlags(FunctionDescriptor functionDescriptor, @NotNull GenerationState state) {
-        return getCommonCallableFlags(functionDescriptor, null, state);
+        return getCommonCallableFlags(functionDescriptor, null, state.getDeprecationProvider());
     }
 
     private static int getCommonCallableFlags(
             FunctionDescriptor functionDescriptor,
             @Nullable OwnerKind kind,
-            @NotNull GenerationState state
+            @NotNull DeprecationResolver deprecationResolver
     ) {
         int flags = getVisibilityAccessFlag(functionDescriptor, kind);
         flags |= getVarargsFlag(functionDescriptor);
         flags |= getDeprecatedAccessFlag(functionDescriptor);
-        if (state.getDeprecationProvider().isDeprecatedHidden(functionDescriptor) ||
+        if (deprecationResolver.isDeprecatedHidden(functionDescriptor) ||
             (functionDescriptor.isSuspend()) && functionDescriptor.getVisibility().equals(Visibilities.PRIVATE)) {
             flags |= ACC_SYNTHETIC;
         }
@@ -424,6 +435,11 @@ public class AsmUtil {
         return InlineUtil.isInlineOrContainingInline(descriptor.getContainingDeclaration()) ? ACC_PUBLIC : NO_FLAG_PACKAGE_PRIVATE;
     }
 
+    public static int getSyntheticAccessFlagForLambdaClass(@NotNull ClassDescriptor descriptor) {
+        return descriptor instanceof SyntheticClassDescriptorForLambda &&
+               ((SyntheticClassDescriptorForLambda) descriptor).isCallableReference() ? ACC_SYNTHETIC : 0;
+    }
+
     public static int calculateInnerClassAccessFlags(@NotNull ClassDescriptor innerClass) {
         int visibility =
                 innerClass instanceof SyntheticClassDescriptorForLambda
@@ -432,6 +448,7 @@ public class AsmUtil {
                   ? ACC_PUBLIC
                   : getVisibilityAccessFlag(innerClass);
         return visibility |
+               getSyntheticAccessFlagForLambdaClass(innerClass) |
                innerAccessFlagsForModalityAndKind(innerClass) |
                (innerClass.isInner() ? 0 : ACC_STATIC);
     }
@@ -481,6 +498,10 @@ public class AsmUtil {
     private static Integer specialCaseVisibility(@NotNull MemberDescriptor memberDescriptor, @Nullable OwnerKind kind) {
         DeclarationDescriptor containingDeclaration = memberDescriptor.getContainingDeclaration();
         Visibility memberVisibility = memberDescriptor.getVisibility();
+
+        if (JvmCodegenUtil.isNonIntrinsicPrivateCompanionObjectInInterface(memberDescriptor)) {
+            return ACC_PUBLIC;
+        }
 
         if (memberDescriptor instanceof FunctionDescriptor &&
             isInlineClassWrapperConstructor((FunctionDescriptor) memberDescriptor, kind)) {
@@ -614,7 +635,6 @@ public class AsmUtil {
     }
 
     public static void genClosureFields(List<Pair<String, Type>> allFields, ClassBuilder builder) {
-        //noinspection PointlessBitwiseExpression
         int access = NO_FLAG_PACKAGE_PRIVATE | ACC_SYNTHETIC | ACC_FINAL;
         for (Pair<String, Type> field : allFields) {
             builder.newField(JvmDeclarationOrigin.NO_ORIGIN, access, field.first, field.second.getDescriptor(), null, null);
@@ -634,10 +654,18 @@ public class AsmUtil {
     ) {
         assert !info.isStatic();
         Type fieldType = info.getFieldType();
+        KotlinType fieldKotlinType = info.getFieldKotlinType();
+        KotlinType nullableAny;
+        if (fieldKotlinType != null) {
+            nullableAny = fieldKotlinType.getConstructor().getBuiltIns().getNullableAnyType();
+        } else {
+            nullableAny = null;
+        }
+
         iv.load(ownerIndex, info.getOwnerType());//this
         if (cast) {
             iv.load(index, AsmTypes.OBJECT_TYPE); //param
-            StackValue.coerce(AsmTypes.OBJECT_TYPE, fieldType, iv);
+            StackValue.coerce(AsmTypes.OBJECT_TYPE, nullableAny, fieldType, fieldKotlinType, iv);
         } else {
             iv.load(index, fieldType); //param
         }
@@ -653,8 +681,23 @@ public class AsmUtil {
     }
 
     public static void genInvokeAppendMethod(@NotNull InstructionAdapter v, @NotNull Type type, @Nullable KotlinType kotlinType) {
+        genInvokeAppendMethod(v, type, kotlinType, null);
+    }
+
+    public static void genInvokeAppendMethod(
+            @NotNull InstructionAdapter v,
+            @NotNull Type type,
+            @Nullable KotlinType kotlinType,
+            @Nullable KotlinTypeMapper typeMapper
+    ) {
         Type appendParameterType;
-        if (kotlinType != null && InlineClassesUtilsKt.isInlineClassType(kotlinType)) {
+
+        CallableMethod specializedToString = getSpecializedToStringCallableMethodOrNull(kotlinType, typeMapper);
+        if (specializedToString != null) {
+            specializedToString.genInvokeInstruction(v);
+            appendParameterType = AsmTypes.JAVA_STRING_TYPE;
+        }
+        else if (kotlinType != null && InlineClassesUtilsKt.isInlineClassType(kotlinType)) {
             appendParameterType = OBJECT_TYPE;
             SimpleType nullableAnyType = kotlinType.getConstructor().getBuiltIns().getNullableAnyType();
             StackValue.coerce(type, kotlinType, appendParameterType, nullableAnyType, v);
@@ -669,9 +712,17 @@ public class AsmUtil {
     public static StackValue genToString(
             @NotNull StackValue receiver,
             @NotNull Type receiverType,
-            @Nullable KotlinType receiverKotlinType
+            @Nullable KotlinType receiverKotlinType,
+            @Nullable KotlinTypeMapper typeMapper
     ) {
         return StackValue.operation(JAVA_STRING_TYPE, v -> {
+            CallableMethod specializedToString = getSpecializedToStringCallableMethodOrNull(receiverKotlinType, typeMapper);
+            if (specializedToString != null) {
+                receiver.put(receiverType, receiverKotlinType, v);
+                specializedToString.genInvokeInstruction(v);
+                return null;
+            }
+
             Type type;
             KotlinType kotlinType;
             if (receiverKotlinType != null && InlineClassesUtilsKt.isInlineClassType(receiverKotlinType)) {
@@ -687,6 +738,36 @@ public class AsmUtil {
             v.invokestatic("java/lang/String", "valueOf", "(" + type.getDescriptor() + ")Ljava/lang/String;", false);
             return null;
         });
+    }
+
+    @Nullable
+    private static CallableMethod getSpecializedToStringCallableMethodOrNull(
+            @Nullable KotlinType receiverKotlinType,
+            @Nullable KotlinTypeMapper typeMapper
+    ) {
+        if (typeMapper == null) return null;
+
+        if (receiverKotlinType == null) return null;
+        if (!InlineClassesUtilsKt.isInlineClassType(receiverKotlinType)) return null;
+        if (receiverKotlinType.isMarkedNullable()) return null;
+
+        DeclarationDescriptor receiverTypeDescriptor = receiverKotlinType.getConstructor().getDeclarationDescriptor();
+        assert receiverTypeDescriptor instanceof ClassDescriptor && ((ClassDescriptor) receiverTypeDescriptor).isInline() :
+                "Inline class type expected: " + receiverKotlinType;
+        ClassDescriptor receiverClassDescriptor = (ClassDescriptor) receiverTypeDescriptor;
+        FunctionDescriptor toStringDescriptor = receiverClassDescriptor.getUnsubstitutedMemberScope()
+                .getContributedFunctions(Name.identifier("toString"), NoLookupLocation.FROM_BACKEND)
+                .stream()
+                .filter(
+                        f -> f.getValueParameters().size() == 0
+                             && KotlinBuiltIns.isString(f.getReturnType())
+                             && f.getDispatchReceiverParameter() != null
+                             && f.getExtensionReceiverParameter() == null
+                )
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("'toString' not found in member scope of " + receiverClassDescriptor));
+
+        return typeMapper.mapToCallableMethod(toStringDescriptor, false, OwnerKind.ERASED_INLINE_CLASS);
     }
 
     static void genHashCode(MethodVisitor mv, InstructionAdapter iv, Type type, JvmTarget jvmTarget) {
@@ -757,8 +838,8 @@ public class AsmUtil {
         }
 
         return StackValue.operation(Type.BOOLEAN_TYPE, v -> {
-            left.put(leftType, v);
-            right.put(rightType, v);
+            left.put(AsmTypes.OBJECT_TYPE, left.kotlinType, v);
+            right.put(AsmTypes.OBJECT_TYPE, right.kotlinType, v);
             genAreEqualCall(v);
 
             if (opToken == KtTokens.EXCLEQ || opToken == KtTokens.EXCLEQEQEQ) {
@@ -1141,8 +1222,16 @@ public class AsmUtil {
         return JvmClassName.byFqNameWithoutInnerClasses(fqName).getInternalName();
     }
 
-    public static void putJavaLangClassInstance(@NotNull InstructionAdapter v, @NotNull Type type) {
-        if (isPrimitive(type)) {
+    public static void putJavaLangClassInstance(
+            @NotNull InstructionAdapter v,
+            @NotNull Type type,
+            @Nullable KotlinType kotlinType,
+            @NotNull GenerationState state
+    ) {
+        if (kotlinType != null && InlineClassesUtilsKt.isInlineClassType(kotlinType)) {
+            v.aconst(boxType(type, kotlinType, state));
+        }
+        else if (isPrimitive(type)) {
             v.getstatic(boxType(type).getInternalName(), "TYPE", "Ljava/lang/Class;");
         }
         else {

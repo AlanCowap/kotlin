@@ -12,11 +12,12 @@ import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.sure
 import org.jetbrains.uast.*
 import org.jetbrains.uast.kotlin.KotlinUastLanguagePlugin
-import org.jetbrains.uast.test.env.findElementByText
-import org.jetbrains.uast.test.env.findElementByTextFromPsi
+import org.jetbrains.uast.test.env.kotlin.findElementByText
+import org.jetbrains.uast.test.env.kotlin.findElementByTextFromPsi
 import org.jetbrains.uast.visitor.AbstractUastVisitor
 import org.junit.Assert
 import org.junit.Test
+import kotlin.test.fail as kfail
 
 
 class KotlinUastApiTest : AbstractKotlinUastTest() {
@@ -297,8 +298,8 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
 
     @Test
     fun testNestedAnnotation() = doTest("AnnotationComplex") { _, file ->
-        file.findElementByTextFromPsi<UElement>("@AnnotationArray(value = Annotation())")
-            .findElementByTextFromPsi<UElement>("Annotation()")
+        file.findElementByTextFromPsi<UElement>("@AnnotationArray(value = Annotation(\"sv1\", \"sv2\"))")
+            .findElementByTextFromPsi<UElement>("Annotation(\"sv1\", \"sv2\")")
             .sourcePsiElement
             .let { referenceExpression ->
                 val convertedUAnnotation = referenceExpression
@@ -306,12 +307,51 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
                     .toUElementOfType<UAnnotation>()
                         ?: throw AssertionError("haven't got annotation from $referenceExpression(${referenceExpression?.javaClass})")
 
+                checkDescriptorsLeak(convertedUAnnotation)
                 assertEquals("Annotation", convertedUAnnotation.qualifiedName)
                 val lightAnnotation = convertedUAnnotation.getAsJavaPsiElement(PsiAnnotation::class.java)
                         ?: throw AssertionError("can't get lightAnnotation from $convertedUAnnotation")
                 assertEquals("Annotation", lightAnnotation.qualifiedName)
                 assertEquals("Annotation", (convertedUAnnotation as UAnchorOwner).uastAnchor?.sourcePsi?.text)
             }
+    }
+
+    @Test
+    fun testNestedAnnotationParameters() = doTest("AnnotationComplex") { _, file ->
+
+        fun UFile.annotationAndParam(refText: String, check: (PsiAnnotation, String?) -> Unit) {
+            findElementByTextFromPsi<UElement>(refText)
+                .let { expression ->
+                    val (annotation: PsiAnnotation, paramname: String?) =
+                        getContainingAnnotationEntry(expression) ?: kfail("annotation not found for '$refText' ($expression)")
+                    check(annotation, paramname)
+                }
+        }
+
+        file.annotationAndParam("sv1") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals(null, paramname)
+        }
+        file.annotationAndParam("sv2") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals(null, paramname)
+        }
+        file.annotationAndParam("sar1") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals("strings", paramname)
+        }
+        file.annotationAndParam("sar2") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals("strings", paramname)
+        }
+        file.annotationAndParam("[sar]1") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals("strings", paramname)
+        }
+        file.annotationAndParam("[sar]2") { annotation, paramname ->
+            assertEquals("Annotation", annotation.qualifiedName)
+            assertEquals("strings", paramname)
+        }
     }
 
 

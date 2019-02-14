@@ -38,6 +38,7 @@ dependencies {
         fatJarContents(project(it)) { isTransitive = false }
         testCompile(project(it))
     }
+    compileOnly("org.apache.ivy:ivy:2.4.0")
     runtime(project(":kotlin-compiler"))
     runtime(project(":kotlin-reflect"))
     fatJarContents("org.apache.ivy:ivy:2.4.0")
@@ -45,7 +46,7 @@ dependencies {
     proguardLibraryJars(files(firstFromJavaHomeThatExists("jre/lib/rt.jar", "../Classes/classes.jar"),
                               firstFromJavaHomeThatExists("jre/lib/jsse.jar", "../Classes/jsse.jar"),
                               toolsJar()))
-    proguardLibraryJars(project(":kotlin-stdlib"))
+    proguardLibraryJars(kotlinStdlib())
     proguardLibraryJars(project(":kotlin-reflect"))
 }
 
@@ -90,8 +91,12 @@ runtimeJarArtifactBy(pack, pack.outputs.files.singleFile) {
     classifier = ""
 }
 
+dist(
+    targetName = "$name.jar",
+    fromTask = pack
+)
+
 sourcesJar()
 javadocJar()
 
 publish()
-

@@ -56,7 +56,6 @@ import java.io.PrintWriter
 import java.io.StringWriter
 
 const val GENERATE_SMAP = true
-const val API = Opcodes.ASM5
 const val NUMBERED_FUNCTION_PREFIX = "kotlin/jvm/functions/Function"
 const val INLINE_FUN_VAR_SUFFIX = "\$iv"
 
@@ -89,7 +88,8 @@ internal fun getMethodNode(
     classData: ByteArray,
     methodName: String,
     methodDescriptor: String,
-    classType: Type
+    classType: Type,
+    signatureAmbiguity: Boolean = false
 ): SMAPAndMethodNode? {
     val cr = ClassReader(classData)
     var node: MethodNode? = null
@@ -98,7 +98,7 @@ internal fun getMethodNode(
     lines[0] = Integer.MAX_VALUE
     lines[1] = Integer.MIN_VALUE
 
-    cr.accept(object : ClassVisitor(API) {
+    cr.accept(object : ClassVisitor(Opcodes.API_VERSION) {
 
         override fun visitSource(source: String?, debug: String?) {
             super.visitSource(source, debug)
@@ -113,17 +113,28 @@ internal fun getMethodNode(
             signature: String?,
             exceptions: Array<String>?
         ): MethodVisitor? {
-            if (methodName == name && methodDescriptor == desc) {
-                node = object : MethodNode(API, access, name, desc, signature, exceptions) {
-                    override fun visitLineNumber(line: Int, start: Label) {
-                        super.visitLineNumber(line, start)
-                        lines[0] = Math.min(lines[0], line)
-                        lines[1] = Math.max(lines[1], line)
-                    }
+            if (methodName != name || (signatureAmbiguity && access.and(Opcodes.ACC_SYNTHETIC) != 0)) return null
+
+            if (methodDescriptor != desc) {
+                val sameNumberOfParameters = Type.getArgumentTypes(methodDescriptor).size == Type.getArgumentTypes(desc).size
+                if (!signatureAmbiguity || !sameNumberOfParameters) {
+                    return null
                 }
-                return node
             }
-            return null
+
+            node?.let { existing ->
+                throw AssertionError("Can't find proper '$name' method for inline: ambiguity between '${existing.name + existing.desc}' and '${name + desc}'")
+            }
+
+            return object : MethodNode(Opcodes.API_VERSION, access, name, desc, signature, exceptions) {
+                override fun visitLineNumber(line: Int, start: Label) {
+                    super.visitLineNumber(line, start)
+                    lines[0] = Math.min(lines[0], line)
+                    lines[1] = Math.max(lines[1], line)
+                }
+            }.also {
+                node = it
+            }
         }
     }, ClassReader.SKIP_FRAMES or if (GENERATE_SMAP) 0 else ClassReader.SKIP_DEBUG)
 
@@ -240,7 +251,7 @@ internal fun isAnonymousClass(internalName: String) =
             internalName.substringAfterLast('/').substringAfterLast("$", "").isInteger()
 
 fun wrapWithMaxLocalCalc(methodNode: MethodNode) =
-    MaxStackFrameSizeAndLocalsCalculator(API, methodNode.access, methodNode.desc, methodNode)
+    MaxStackFrameSizeAndLocalsCalculator(Opcodes.API_VERSION, methodNode.access, methodNode.desc, methodNode)
 
 private fun String.isInteger(radix: Int = 10) = toIntOrNull(radix) != null
 
@@ -292,7 +303,7 @@ internal fun insertNodeBefore(from: MethodNode, to: MethodNode, beforeNode: Abst
     }
 }
 
-internal fun createEmptyMethodNode() = MethodNode(API, 0, "fake", "()V", null, null)
+internal fun createEmptyMethodNode() = MethodNode(Opcodes.API_VERSION, 0, "fake", "()V", null, null)
 
 internal fun createFakeContinuationMethodNodeForInline(): MethodNode {
     val methodNode = createEmptyMethodNode()
@@ -458,8 +469,10 @@ internal fun isAfterSuspendMarker(insn: AbstractInsnNode) = isSuspendMarker(insn
 internal fun isReturnsUnitMarker(insn: AbstractInsnNode) = isSuspendMarker(insn, INLINE_MARKER_RETURNS_UNIT)
 internal fun isFakeContinuationMarker(insn: AbstractInsnNode) =
     insn.previous != null && isSuspendMarker(insn.previous, INLINE_MARKER_FAKE_CONTINUATION) && insn.opcode == Opcodes.ACONST_NULL
+
 internal fun isBeforeFakeContinuationConstructorCallMarker(insn: AbstractInsnNode) =
     isSuspendMarker(insn, INLINE_MARKER_BEFORE_FAKE_CONTINUATION_CONSTRUCTOR_CALL)
+
 internal fun isAfterFakeContinuationConstructorCallMarker(insn: AbstractInsnNode) =
     isSuspendMarker(insn, INLINE_MARKER_AFTER_FAKE_CONTINUATION_CONSTRUCTOR_CALL)
 
@@ -543,7 +556,7 @@ internal fun createSpecialEnumMethodBody(
     val isValueOf = "enumValueOf" == name
     val invokeType = typeMapper.mapType(type)
     val desc = getSpecialEnumFunDescriptor(invokeType, isValueOf)
-    val node = MethodNode(API, Opcodes.ACC_STATIC, "fake", desc, null, null)
+    val node = MethodNode(Opcodes.API_VERSION, Opcodes.ACC_STATIC, "fake", desc, null, null)
     ExpressionCodegen.putReifiedOperationMarkerIfTypeIsReifiedParameterWithoutPropagation(
         type,
         ReifiedTypeInliner.OperationKind.ENUM_REIFIED,
@@ -588,7 +601,7 @@ fun FunctionDescriptor.getClassFilePath(typeMapper: KotlinTypeMapper, cache: Inc
     return when (source) {
         is KotlinJvmBinaryPackageSourceElement -> {
             val directMember = JvmCodegenUtil.getDirectMember(this) as? DeserializedCallableMemberDescriptor
-                    ?: throw AssertionError("Expected DeserializedCallableMemberDescriptor, got: $this")
+                ?: throw AssertionError("Expected DeserializedCallableMemberDescriptor, got: $this")
             val kotlinClass =
                 source.getContainingBinaryClass(directMember) ?: throw AssertionError("Descriptor $this is not found, in: $source")
             if (kotlinClass !is VirtualFileKotlinClass) {

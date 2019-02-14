@@ -7,11 +7,22 @@ package org.jetbrains.kotlin.config
 
 import com.intellij.openapi.application.ApplicationManager
 
-private const val JPS_STANDALONE_CLASS_NAME = "org.jetbrains.jps.build.Standalone"
+private const val APPLICATION_MANAGER_CLASS_NAME = "com.intellij.openapi.application.ApplicationManager"
 
 val isJps: Boolean by lazy {
-    val jpsStandaloneClassName = JPS_STANDALONE_CLASS_NAME.replace('.', '/') + ".class"
+    /*
+        Normally, JPS shouldn't have an ApplicationManager class in the classpath,
+        but that's not true for JPS inside IDEA right now.
+        Though Application is not properly initialized inside JPS so we can use it as a check.
+     */
+    return@lazy if (doesClassExist(APPLICATION_MANAGER_CLASS_NAME)) {
+        ApplicationManager.getApplication() == null
+    } else {
+        true
+    }
+}
 
-    (object {}.javaClass.classLoader.getResource(jpsStandaloneClassName) != null)
-            || ApplicationManager.getApplication() == null
+private fun doesClassExist(fqName: String): Boolean {
+    val classPath = fqName.replace('.', '/') + ".class"
+    return {}.javaClass.classLoader.getResource(classPath) != null
 }

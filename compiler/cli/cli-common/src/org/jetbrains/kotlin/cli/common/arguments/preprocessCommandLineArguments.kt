@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.cli.common.arguments
 
+import org.jetbrains.annotations.TestOnly
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -16,15 +17,13 @@ private const val EXPERIMENTAL_ARGFILE_ARGUMENT = "-Xargfile="
 private const val SINGLE_QUOTE = '\''
 private const val DOUBLE_QUOTE = '"'
 private const val BACKSLASH = '\\'
-private const val WHITESPACE = ' '
-private const val NEWLINE = '\n'
 
 /**
  * Performs initial preprocessing of arguments, passed to the compiler.
  * This is done prior to *any* arguments parsing, and result of preprocessing
  * will be used instead of actual passed arguments.
  */
-internal fun preprocessCommandLineArguments(args: List<String>, errors: ArgumentParseErrors): List<String> =
+fun preprocessCommandLineArguments(args: List<String>, errors: ArgumentParseErrors): List<String> =
     args.flatMap { arg ->
         if (arg.isArgfileArgument) {
             File(arg.argfilePath).expand(errors)
@@ -36,6 +35,12 @@ internal fun preprocessCommandLineArguments(args: List<String>, errors: Argument
             listOf(arg)
         }
     }
+
+@TestOnly
+fun readArgumentsFromArgFile(content: String): List<String> {
+    val reader = content.reader()
+    return generateSequence { reader.parseNextArgument() }.toList()
+}
 
 private fun File.expand(errors: ArgumentParseErrors): List<String> {
     return try {
@@ -56,25 +61,26 @@ private fun Reader.parseNextArgument(): String? {
     val sb = StringBuilder()
 
     var r = nextChar()
-    while (r != null && (r == WHITESPACE || r == NEWLINE)) {
+    while (r != null && r.isWhitespace()) {
         r = nextChar()
     }
 
-    loop@ while (r != null) {
-        when (r) {
-            WHITESPACE, NEWLINE -> break@loop
-            DOUBLE_QUOTE, SINGLE_QUOTE -> consumeRestOfEscapedSequence(sb, r)
-            BACKSLASH -> nextChar()?.apply(sb::append)
-            else -> sb.append(r)
+    while (r != null) {
+        if (r.isWhitespace()) break
+
+        if (r == DOUBLE_QUOTE || r == SINGLE_QUOTE) {
+            consumeRestOfQuotedSequence(sb, r)
+            return sb.toString()
         }
 
+        sb.append(r)
         r = nextChar()
     }
 
     return sb.toString().takeIf { it.isNotEmpty() }
 }
 
-private fun Reader.consumeRestOfEscapedSequence(sb: StringBuilder, quote: Char) {
+private fun Reader.consumeRestOfQuotedSequence(sb: StringBuilder, quote: Char) {
     var ch = nextChar()
     while (ch != null && ch != quote) {
         if (ch == BACKSLASH) nextChar()?.apply(sb::append) else sb.append(ch)

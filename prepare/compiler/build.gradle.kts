@@ -17,8 +17,6 @@ val shrink =
     findProperty("kotlin.build.proguard")?.toString()?.toBoolean()
     ?: hasProperty("teamcity")
 
-val compilerManifestClassPath = "kotlin-stdlib.jar kotlin-reflect.jar kotlin-script-runtime.jar"
-
 val fatJarContents by configurations.creating
 
 val fatJarContentsStripMetadata by configurations.creating
@@ -31,6 +29,7 @@ val compile by configurations  // maven plugin writes pom compile scope from com
 val libraries by configurations.creating {
     extendsFrom(compile)
 }
+val trove4jJar by configurations.creating
 
 val default by configurations
 default.extendsFrom(runtimeJar)
@@ -48,9 +47,10 @@ val compiledModulesSources = compilerModules.map {
 }
 
 dependencies {
-    compile(project(":kotlin-stdlib"))
+    compile(kotlinStdlib())
     compile(project(":kotlin-script-runtime"))
     compile(project(":kotlin-reflect"))
+    compile(commonDep("org.jetbrains.intellij.deps", "trove4j"))
 
     libraries(project(":kotlin-annotations-jvm"))
     libraries(
@@ -69,7 +69,9 @@ dependencies {
         fatSourcesJarContents(it)
     }
 
-    fatJarContents(project(":core:builtins", configuration = "builtins"))
+    trove4jJar(intellijDep()) { includeIntellijCoreJarDependencies(project) { it.startsWith("trove4j") } }
+
+    fatJarContents(project(":core:builtins"))
     fatJarContents(commonDep("javax.inject"))
     fatJarContents(commonDep("org.jline", "jline"))
     fatJarContents(commonDep("org.fusesource.jansi", "jansi"))
@@ -78,25 +80,40 @@ dependencies {
     fatJarContents(commonDep("io.javaslang", "javaslang"))
     fatJarContents(commonDep("org.jetbrains.kotlinx", "kotlinx-coroutines-core")) { isTransitive = false }
 
-    fatJarContents(intellijCoreDep()) { includeJars("intellij-core") }
-    fatJarContents(intellijDep()) { includeIntellijCoreJarDependencies(project, { !(it.startsWith("jdom") || it.startsWith("log4j")) }) }
+    fatJarContents(intellijCoreDep()) { includeJars("intellij-core", "java-compatibility-1.0.1") }
+    fatJarContents(intellijDep()) {
+        includeIntellijCoreJarDependencies(project) {
+            !(it.startsWith("jdom") || it.startsWith("log4j") || it.startsWith("trove4j"))
+        }
+    }
     fatJarContents(intellijDep()) { includeJars("jna-platform", "lz4-1.3.0") }
     fatJarContentsStripServices(intellijDep("jps-standalone")) { includeJars("jps-model") }
-    fatJarContentsStripMetadata(intellijDep()) { includeJars("oro-2.0.8", "jdom", "log4j") }
+    fatJarContentsStripMetadata(intellijDep()) { includeJars("oro-2.0.8", "jdom", "log4j" ) }
 }
 
+noDefaultJar()
 
 val packCompiler by task<ShadowJar> {
     configurations = listOf(fatJar)
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE)
     destinationDir = File(buildDir, "libs")
 
     setupPublicJar(compilerBaseName, "before-proguard")
 
     from(fatJarContents)
-    afterEvaluate {
-        fatJarContentsStripServices.files.forEach { from(zipTree(it)) { exclude("META-INF/services/**") } }
-        fatJarContentsStripMetadata.files.forEach { from(zipTree(it)) { exclude("META-INF/jb/** META-INF/LICENSE") } }
+
+    dependsOn(fatJarContentsStripServices)
+    from {
+        fatJarContentsStripServices.files.map {
+            zipTree(it).matching { exclude("META-INF/services/**") }
+        }
+    }
+
+    dependsOn(fatJarContentsStripMetadata)
+    from {
+        fatJarContentsStripMetadata.files.map {
+            zipTree(it).matching { exclude("META-INF/jb/**", "META-INF/LICENSE") }
+        }
     }
 
     manifest.attributes["Class-Path"] = compilerManifestClassPath
@@ -125,10 +142,9 @@ val proguard by task<ProGuardTask> {
 
 val pack = if (shrink) proguard else packCompiler
 
-dist(
-    targetName = "$compilerBaseName.jar",
-    fromTask = pack
-)
+dist(targetName = "$compilerBaseName.jar", fromTask = pack) {
+    from(trove4jJar)
+}
 
 runtimeJarArtifactBy(pack, pack.outputs.files.singleFile) {
     name = compilerBaseName

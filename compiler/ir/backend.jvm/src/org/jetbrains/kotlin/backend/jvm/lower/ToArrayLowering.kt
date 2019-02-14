@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.backend.common.ClassLoweringPass
 import org.jetbrains.kotlin.backend.common.descriptors.KnownClassDescriptor
 import org.jetbrains.kotlin.backend.common.descriptors.KnownPackageFragmentDescriptor
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
+import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.codegen.isJvmInterface
@@ -42,7 +43,13 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.types.Variance
 
-class ToArrayLowering(private val context: JvmBackendContext) : ClassLoweringPass {
+internal val toArrayPhase = makeIrFilePhase(
+    ::ToArrayLowering,
+    name = "ToArray",
+    description = "Handle toArray functions"
+)
+
+private class ToArrayLowering(private val context: JvmBackendContext) : ClassLoweringPass {
 
     override fun lower(irClass: IrClass) {
         if (irClass.isJvmInterface) return
@@ -80,13 +87,20 @@ class ToArrayLowering(private val context: JvmBackendContext) : ClassLoweringPas
             )
 
             val toArrayUtilDescriptor = createToArrayUtilDescriptor(builtIns, false)
+            val toArrayType = toArrayUtilDescriptor.returnType!!.toIrType()!!
 
-            val irFunction = IrFunctionImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, JvmLoweredDeclarationOrigin.TO_ARRAY, toArrayDescriptor)
+            val irFunction = IrFunctionImpl(
+                UNDEFINED_OFFSET,
+                UNDEFINED_OFFSET,
+                JvmLoweredDeclarationOrigin.TO_ARRAY,
+                toArrayDescriptor,
+                returnType = toArrayType
+            )
             irFunction.createParameterDeclarations()
 
             irFunction.body = context.createIrBuilder(irFunction.symbol).irBlockBody {
                 +irReturn(
-                    irCall(IrSimpleFunctionSymbolImpl(toArrayUtilDescriptor), toArrayUtilDescriptor.returnType!!.toIrType()!!).apply {
+                    irCall(IrSimpleFunctionSymbolImpl(toArrayUtilDescriptor), toArrayType).apply {
                         putValueArgument(
                             0,
                             IrGetValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irFunction.dispatchReceiverParameter!!.symbol)
@@ -138,13 +152,20 @@ class ToArrayLowering(private val context: JvmBackendContext) : ClassLoweringPas
             )
 
             val toArrayUtilDescriptor = createToArrayUtilDescriptor(builtIns, true)
+            val toArrayType = toArrayUtilDescriptor.returnType!!.toIrType()!!
 
-            val irFunction = IrFunctionImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, JvmLoweredDeclarationOrigin.TO_ARRAY, toArrayDescriptor)
+            val irFunction = IrFunctionImpl(
+                UNDEFINED_OFFSET,
+                UNDEFINED_OFFSET,
+                JvmLoweredDeclarationOrigin.TO_ARRAY,
+                toArrayDescriptor,
+                toArrayType
+            )
             irFunction.createParameterDeclarations()
 
             irFunction.body = context.createIrBuilder(irFunction.symbol).irBlockBody {
                 +irReturn(
-                    irCall(IrSimpleFunctionSymbolImpl(toArrayUtilDescriptor), toArrayUtilDescriptor.returnType!!.toIrType()!!).apply {
+                    irCall(IrSimpleFunctionSymbolImpl(toArrayUtilDescriptor), toArrayType).apply {
                         putValueArgument(
                             0,
                             IrGetValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, irFunction.dispatchReceiverParameter!!.symbol)

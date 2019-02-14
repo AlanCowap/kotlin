@@ -6,9 +6,10 @@
 package org.jetbrains.kotlin.backend.js
 
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedPropertyDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
 import org.jetbrains.kotlin.backend.common.ir.copyTo
+import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
@@ -50,7 +51,7 @@ class JsDeclarationFactory : DeclarationFactory {
         }
 
     private fun createPropertyWithBackingField(name: Name, visibility: Visibility, parent: IrClass, fieldType: IrType, origin: IrDeclarationOrigin): IrField {
-        val descriptor = WrappedPropertyDescriptor()
+        val descriptor = WrappedFieldDescriptor()
         val symbol = IrFieldSymbolImpl(descriptor)
 
         return IrFieldImpl(
@@ -94,14 +95,16 @@ class JsDeclarationFactory : DeclarationFactory {
             symbol,
             oldConstructor.name,
             oldConstructor.visibility,
+            oldConstructor.returnType,
             oldConstructor.isInline,
             oldConstructor.isExternal,
             oldConstructor.isPrimary
         ).also {
             descriptor.bind(it)
             it.parent = oldConstructor.parent
-            it.returnType = oldConstructor.returnType
         }
+
+        newConstructor.copyTypeParametersFrom(oldConstructor)
 
         val outerThisValueParameter =
             JsIrBuilder.buildValueParameter(Namer.OUTER_NAME, 0, outerThisType).also { it.parent = newConstructor }
@@ -109,11 +112,7 @@ class JsDeclarationFactory : DeclarationFactory {
         val newValueParameters = mutableListOf(outerThisValueParameter)
 
         for (p in oldConstructor.valueParameters) {
-            newValueParameters += p.copyTo(newConstructor, 1)
-        }
-
-        for (p in oldConstructor.typeParameters) {
-            newConstructor.typeParameters += p.copyTo(newConstructor)
+            newValueParameters += p.copyTo(newConstructor, index = p.index + 1)
         }
 
         newConstructor.valueParameters += newValueParameters

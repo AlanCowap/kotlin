@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.coroutines
 
 import com.intellij.util.containers.Stack
+import org.jetbrains.kotlin.backend.common.CodegenUtil
 import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.StackValue
@@ -19,7 +20,10 @@ import org.jetbrains.kotlin.codegen.optimization.fixStack.top
 import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.config.isReleaseCoroutines
+import org.jetbrains.kotlin.diagnostics.DiagnosticSink
+import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
@@ -56,9 +60,11 @@ class CoroutineTransformerMethodVisitor(
     obtainClassBuilderForCoroutineState: () -> ClassBuilder,
     private val isForNamedFunction: Boolean,
     private val shouldPreserveClassInitialization: Boolean,
-    private val lineNumber: Int,
     private val languageVersionSettings: LanguageVersionSettings,
     private val sourceFile: String,
+    // These two are needed to report diagnostics about suspension points inside critical section
+    private val element: KtElement,
+    private val diagnostics: DiagnosticSink,
     // It's only matters for named functions, may differ from '!isStatic(access)' in case of DefaultImpls
     private val needDispatchReceiver: Boolean = false,
     // May differ from containingClassInternalName in case of DefaultImpls
@@ -68,6 +74,7 @@ class CoroutineTransformerMethodVisitor(
 ) : TransformationMethodVisitor(delegate, access, name, desc, signature, exceptions) {
 
     private val classBuilderForCoroutineState: ClassBuilder by lazy(obtainClassBuilderForCoroutineState)
+    private val lineNumber = element?.let { CodegenUtil.getLineNumberForElement(it, false) } ?: 0
 
     private var continuationIndex = if (isForNamedFunction) -1 else 0
     private var dataIndex = if (isForNamedFunction) -1 else 1
@@ -89,6 +96,8 @@ class CoroutineTransformerMethodVisitor(
         updateMaxStack(methodNode)
 
         val suspensionPoints = collectSuspensionPoints(methodNode)
+
+        checkForSuspensionPointInsideMonitor(methodNode, suspensionPoints)
 
         // First instruction in the method node may change in case of named function
         val actualCoroutineStart = methodNode.instructions.first
@@ -129,10 +138,7 @@ class CoroutineTransformerMethodVisitor(
 
         val suspendMarkerVarIndex = methodNode.maxLocals++
 
-        val suspensionPointLineNumbers =
-            suspensionPoints.map { suspensionPoint ->
-                suspensionPoint.suspensionCallBegin.findPreviousOrNull { it is LineNumberNode } as LineNumberNode?
-            }
+        val suspensionPointLineNumbers = suspensionPoints.map { findSuspensionPointLineNumber(it) }
 
         val continuationLabels = suspensionPoints.withIndex().map {
             transformCallAndReturnContinuationLabel(it.index + 1, it.value, methodNode, suspendMarkerVarIndex)
@@ -191,6 +197,46 @@ class CoroutineTransformerMethodVisitor(
         }
     }
 
+    private fun findSuspensionPointLineNumber(suspensionPoint: SuspensionPoint) =
+        suspensionPoint.suspensionCallBegin.findPreviousOrNull { it is LineNumberNode } as LineNumberNode?
+
+    private fun checkForSuspensionPointInsideMonitor(methodNode: MethodNode, suspensionPoints: List<SuspensionPoint>) {
+        if (methodNode.instructions.asSequence().none { it.opcode == Opcodes.MONITORENTER }) return
+
+        val cfg = ControlFlowGraph.build(methodNode)
+        val monitorDepthMap = hashMapOf<AbstractInsnNode, Int>()
+        fun addMonitorDepthToSuccs(index: Int, depth: Int) {
+            val insn = methodNode.instructions[index]
+            monitorDepthMap[insn] = depth
+            val newDepth = when (insn.opcode) {
+                Opcodes.MONITORENTER -> depth + 1
+                Opcodes.MONITOREXIT -> depth - 1
+                else -> depth
+            }
+            for (succIndex in cfg.getSuccessorsIndices(index)) {
+                if (monitorDepthMap[methodNode.instructions[succIndex]] == null) {
+                    addMonitorDepthToSuccs(succIndex, newDepth)
+                }
+            }
+        }
+
+        addMonitorDepthToSuccs(0, 0)
+
+        for (suspensionPoint in suspensionPoints) {
+            if (monitorDepthMap[suspensionPoint.suspensionCallBegin]?.let { it > 0 } == true) {
+                // TODO: Support crossinline suspend lambdas
+                val stackTraceElement = StackTraceElement(
+                    containingClassInternalName,
+                    methodNode.name,
+                    sourceFile,
+                    findSuspensionPointLineNumber(suspensionPoint)?.line ?: -1
+                )
+                diagnostics.report(ErrorsJvm.SUSPENSION_POINT_INSIDE_MONITOR.on(element, "$stackTraceElement"))
+                return
+            }
+        }
+    }
+
     private fun fixLvtForParameters(methodNode: MethodNode, startLabel: LabelNode, endLabel: LabelNode) {
         // We need to skip continuation, since the inliner likes to remap variables there.
         // But this is not a problem, since we have separate $continuation LVT entry
@@ -238,7 +284,7 @@ class CoroutineTransformerMethodVisitor(
             variablesMapping.forEach { v.visit(null, it.variableName) }
         }.visitEnd()
         metadata.visit(COROUTINES_METADATA_METHOD_NAME_JVM_NAME, methodNode.name)
-        metadata.visit(COROUTINES_METADATA_CLASS_NAME_JVM_NAME, containingClassInternalName)
+        metadata.visit(COROUTINES_METADATA_CLASS_NAME_JVM_NAME, Type.getObjectType(containingClassInternalName).className)
         @Suppress("ConstantConditionIf")
         if (COROUTINES_DEBUG_METADATA_VERSION != 1) {
             metadata.visit(COROUTINES_METADATA_VERSION_JVM_NAME, COROUTINES_DEBUG_METADATA_VERSION)
@@ -308,8 +354,8 @@ class CoroutineTransformerMethodVisitor(
         methodNode.instructions.resetLabels()
         methodNode.accept(
             MaxStackFrameSizeAndLocalsCalculator(
-                Opcodes.ASM5, methodNode.access, methodNode.desc,
-                object : MethodVisitor(Opcodes.ASM5) {
+                Opcodes.API_VERSION, methodNode.access, methodNode.desc,
+                object : MethodVisitor(Opcodes.API_VERSION) {
                     override fun visitMaxs(maxStack: Int, maxLocals: Int) {
                         methodNode.maxStack = maxStack
                     }
@@ -492,7 +538,7 @@ class CoroutineTransformerMethodVisitor(
             // k + 2 - exception
             val variablesToSpill =
                 (0 until localsCount)
-                    .filter { it !in setOf(continuationIndex, dataIndex, exceptionIndex) }
+                    .filterNot { it in setOf(continuationIndex, dataIndex, exceptionIndex) }
                     .map { Pair(it, frame.getLocal(it)) }
                     .filter { (index, value) ->
                         (index == 0 && needDispatchReceiver && isForNamedFunction) ||
@@ -782,23 +828,20 @@ internal fun InstructionAdapter.generateContinuationConstructorCall(
 
 private fun InstructionAdapter.generateResumeWithExceptionCheck(isReleaseCoroutines: Boolean, dataIndex: Int, exceptionIndex: Int) {
     // Check if resumeWithException has been called
-    load(if (isReleaseCoroutines) dataIndex else exceptionIndex, AsmTypes.OBJECT_TYPE)
-    dup()
-    val noExceptionLabel = Label()
 
     if (isReleaseCoroutines) {
-        instanceOf(AsmTypes.RESULT_FAILURE)
-        ifeq(noExceptionLabel)
-        // TODO: do we need this checkcast?
-        checkcast(AsmTypes.RESULT_FAILURE)
-        getfield(AsmTypes.RESULT_FAILURE.internalName, "exception", AsmTypes.JAVA_THROWABLE_TYPE.descriptor)
+        load(dataIndex, AsmTypes.OBJECT_TYPE)
+        invokestatic("kotlin/ResultKt", "throwOnFailure", "(Ljava/lang/Object;)V", false)
     } else {
+        load(exceptionIndex, AsmTypes.OBJECT_TYPE)
+        dup()
+        val noExceptionLabel = Label()
         ifnull(noExceptionLabel)
-    }
-    athrow()
+        athrow()
 
-    mark(noExceptionLabel)
-    pop()
+        mark(noExceptionLabel)
+        pop()
+    }
 }
 
 private fun Type.fieldNameForVar(index: Int) = descriptor.first() + "$" + index
@@ -901,14 +944,14 @@ private fun allSuspensionPointsAreTailCalls(
         safelyReachableReturns[endIndex + 1]?.all { returnIndex ->
             sourceFrames[returnIndex].top().sure {
                 "There must be some value on stack to return"
-            }.insns.all { sourceInsn ->
+            }.insns.any { sourceInsn ->
                 sourceInsn?.let(instructions::indexOf) in beginIndex..endIndex
             }
         } ?: false
     }
 }
 
-internal class IgnoringCopyOperationSourceInterpreter : SourceInterpreter() {
+internal class IgnoringCopyOperationSourceInterpreter : SourceInterpreter(Opcodes.API_VERSION) {
     override fun copyOperation(insn: AbstractInsnNode?, value: SourceValue?) = value
 }
 

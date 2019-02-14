@@ -6,30 +6,28 @@
 package org.jetbrains.kotlin.spec.tasks
 
 import com.google.gson.JsonObject
-import org.jetbrains.kotlin.spec.TestsJsonMapBuilder
-import org.jetbrains.kotlin.spec.validators.LinkedSpecTestValidator
-import org.jetbrains.kotlin.spec.validators.SpecTestValidationException
+import org.jetbrains.kotlin.spec.models.LinkedSpecTest
+import org.jetbrains.kotlin.spec.parsers.CommonParser
+import org.jetbrains.kotlin.spec.utils.GeneralConfiguration.MODULE_PATH
+import org.jetbrains.kotlin.spec.utils.GeneralConfiguration.TESTDATA_PATH
+import org.jetbrains.kotlin.spec.utils.TestsJsonMapBuilder
 import java.io.File
 
-private const val TEST_DATA_DIR = "./testData"
-private const val OUT_DIR = "./out"
+private const val OUT_DIR = "out"
 private const val OUT_FILENAME = "testsMap.json"
 
 fun main(args: Array<String>) {
     val testsMap = JsonObject()
 
-    File(TEST_DATA_DIR).walkTopDown().forEach {
-        val specTestValidator = LinkedSpecTestValidator(it)
+    File(TESTDATA_PATH).walkTopDown().forEach {
+        val (specTest, _) = CommonParser.parseSpecTest(it.canonicalPath, mapOf("main.kt" to it.readText()))
 
-        try {
-            specTestValidator.parseTestInfo()
-        } catch (e: SpecTestValidationException) {
-            return@forEach
-        }
-
-        TestsJsonMapBuilder.buildJsonElement(specTestValidator.testInfo, testsMap)
+        if (specTest is LinkedSpecTest)
+            TestsJsonMapBuilder.buildJsonElement(specTest, testsMap)
     }
 
-    File(OUT_DIR).mkdir()
-    File("$OUT_DIR/$OUT_FILENAME").writeText(testsMap.toString())
+    val outDir = "$MODULE_PATH/$OUT_DIR"
+
+    File(outDir).mkdir()
+    File("$outDir/$OUT_FILENAME").writeText(testsMap.toString())
 }

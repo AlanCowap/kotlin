@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -517,6 +517,16 @@ public class KeywordCompletionTestGenerated extends AbstractKeywordCompletionTes
     @TestMetadata("TopScope.kt")
     public void testTopScope() throws Exception {
         runTest("idea/idea-completion/testData/keywords/TopScope.kt");
+    }
+
+    @TestMetadata("topScope2.kt")
+    public void testTopScope2() throws Exception {
+        runTest("idea/idea-completion/testData/keywords/topScope2.kt");
+    }
+
+    @TestMetadata("TopScope3-.kt")
+    public void testTopScope3_() throws Exception {
+        runTest("idea/idea-completion/testData/keywords/TopScope3-.kt");
     }
 
     @TestMetadata("UseSiteTargetForPrimaryConstructorParameter.kt")

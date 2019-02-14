@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -13,9 +13,6 @@ package kotlin.ranges
 // See: https://github.com/JetBrains/kotlin/tree/master/libraries/stdlib
 //
 
-import kotlin.*
-import kotlin.text.*
-import kotlin.comparisons.*
 import kotlin.random.*
 
 /**
@@ -185,7 +182,7 @@ public infix fun ULongProgression.step(step: Long): ULongProgression {
 /**
  * Returns a range from this value up to but excluding the specified [to] value.
  * 
- * If the [to] value is less than or equal to `this` value the returned range is empty.
+ * If the [to] value is less than or equal to `this` value, then the returned range is empty.
  */
 @SinceKotlin("1.3")
 @ExperimentalUnsignedTypes
@@ -196,9 +193,7 @@ public infix fun UByte.until(to: UByte): UIntRange {
 /**
  * Returns a range from this value up to but excluding the specified [to] value.
  * 
- * If the [to] value is less than or equal to `this` value the returned range is empty.
- * 
- * If the [to] value is less than or equal to [UInt.MIN_VALUE] the returned range is empty.
+ * If the [to] value is less than or equal to `this` value, then the returned range is empty.
  */
 @SinceKotlin("1.3")
 @ExperimentalUnsignedTypes
@@ -210,9 +205,7 @@ public infix fun UInt.until(to: UInt): UIntRange {
 /**
  * Returns a range from this value up to but excluding the specified [to] value.
  * 
- * If the [to] value is less than or equal to `this` value the returned range is empty.
- * 
- * If the [to] value is less than or equal to [ULong.MIN_VALUE] the returned range is empty.
+ * If the [to] value is less than or equal to `this` value, then the returned range is empty.
  */
 @SinceKotlin("1.3")
 @ExperimentalUnsignedTypes
@@ -224,7 +217,7 @@ public infix fun ULong.until(to: ULong): ULongRange {
 /**
  * Returns a range from this value up to but excluding the specified [to] value.
  * 
- * If the [to] value is less than or equal to `this` value the returned range is empty.
+ * If the [to] value is less than or equal to `this` value, then the returned range is empty.
  */
 @SinceKotlin("1.3")
 @ExperimentalUnsignedTypes

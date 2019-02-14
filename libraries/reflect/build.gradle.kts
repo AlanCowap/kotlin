@@ -47,9 +47,9 @@ configurations.getByName("compileOnly").extendsFrom(shadows)
 val mainJar by configurations.creating
 
 dependencies {
-    compile(project(":kotlin-stdlib"))
+    compile(kotlinStdlib())
 
-    proguardDeps(project(":kotlin-stdlib"))
+    proguardDeps(kotlinStdlib())
     proguardAdditionalInJars(project(":kotlin-annotations-jvm"))
     proguardDeps(files(firstFromJavaHomeThatExists("jre/lib/rt.jar", "../Classes/classes.jar", jdkHome = File(property("JDK_16") as String))))
 
@@ -62,7 +62,9 @@ dependencies {
     shadows(project(":core:descriptors.runtime"))
     shadows(project(":core:util.runtime"))
     shadows("javax.inject:javax.inject:1")
-    shadows(project(":custom-dependencies:protobuf-lite", configuration = "default"))
+    shadows(protobufLite())
+    
+    compileOnly("org.jetbrains:annotations:13.0")
 }
 
 class KotlinModuleShadowTransformer(private val logger: Logger) : Transformer {
@@ -109,14 +111,7 @@ class KotlinModuleShadowTransformer(private val logger: Logger) : Transformer {
 val reflectShadowJar by task<ShadowJar> {
     classifier = "shadow"
     version = null
-    callGroovy("manifestAttributes", manifest, project, "Main", true)
-
-    from(project(":core:descriptors.jvm").mainSourceSet.resources) {
-        include("META-INF/services/**")
-    }
-    from(project(":core:deserialization").mainSourceSet.resources) {
-        include("META-INF/services/**")
-    }
+    callGroovy("manifestAttributes", manifest, project, "Main" /*true*/)
 
     exclude("**/*.proto")
 
@@ -191,6 +186,16 @@ val sourcesJar = sourcesJar(sourceSet = null) {
 val result by task<Jar> {
     dependsOn(proguard)
     from(zipTree(file(proguardOutput)))
+//    from(zipTree(reflectShadowJar.archivePath)) {
+//        include("META-INF/versions/**")
+//    }
+    callGroovy("manifestAttributes", manifest, project, "Main" /*true*/)
+}
+
+val modularJar by task<Jar> {
+    dependsOn(proguard)
+    classifier = "modular"
+    from(zipTree(file(proguardOutput)))
     from(zipTree(reflectShadowJar.archivePath)) {
         include("META-INF/versions/**")
     }
@@ -208,12 +213,13 @@ artifacts {
     val artifactJar = mapOf(
         "file" to result.outputs.files.single(),
         "builtBy" to result,
-        "name" to property("archivesBaseName")
+        "name" to base.archivesBaseName
     )
 
     add(mainJar.name, artifactJar)
     add("runtime", artifactJar)
     add("archives", artifactJar)
+    add("archives", modularJar)
 }
 
 javadocJar()

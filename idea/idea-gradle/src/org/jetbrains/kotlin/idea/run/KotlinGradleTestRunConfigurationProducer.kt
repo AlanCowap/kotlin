@@ -15,7 +15,6 @@
  */
 package org.jetbrains.kotlin.idea.run
 
-import com.intellij.execution.JavaRunConfigurationExtensionManager
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.execution.junit.PatternConfigurationProducer
@@ -29,8 +28,6 @@ import com.intellij.openapi.util.component2
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
-import org.jetbrains.kotlin.idea.project.platform
-import org.jetbrains.kotlin.platform.impl.isJvm
 import org.jetbrains.plugins.gradle.execution.test.runner.TestClassGradleConfigurationProducer
 import org.jetbrains.plugins.gradle.execution.test.runner.TestMethodGradleConfigurationProducer
 import org.jetbrains.plugins.gradle.util.GradleConstants
@@ -57,7 +54,7 @@ private fun getTestClass(leaf: PsiElement): PsiClass? {
 
 private fun getTestMethod(leaf: PsiElement): PsiMethod? {
     if (IS_JUNIT_ENABLED) {
-        KotlinJUnitRunConfigurationProducer.getTestMethodLocation(leaf)?.psiElement?.let { return it }
+        KotlinJUnitRunConfigurationProducer.getTestMethod(leaf)?.let { return it }
     }
     if (IS_TESTNG_ENABLED) {
         KotlinTestNgConfigurationProducer.getTestClassAndMethod(leaf)?.second?.let { return it }
@@ -74,8 +71,7 @@ class KotlinTestClassGradleConfigurationProducer : TestClassGradleConfigurationP
         if (!IS_TEST_FRAMEWORK_PLUGIN_ENABLED) return false
 
         val contextLocation = context.location ?: return false
-        val module = context.module ?: return false
-        if (!module.platform.isJvm) return false
+        val module = context.module?.asJvmModule() ?: return false
 
         if (RunConfigurationProducer.getInstance(PatternConfigurationProducer::class.java).isMultipleElementsSelected(context)) {
             return false
@@ -94,9 +90,9 @@ class KotlinTestClassGradleConfigurationProducer : TestClassGradleConfigurationP
         configuration.settings.externalProjectPath = projectPath
         configuration.settings.taskNames = tasksToRun
         configuration.settings.scriptParameters = String.format("--tests \"%s\"", testClass.qualifiedName)
-        configuration.name = testClass.name
+        configuration.name = testClass.name ?: "unknown"
 
-        JavaRunConfigurationExtensionManager.getInstance().extendCreatedConfiguration(configuration, contextLocation)
+        JavaRunConfigurationExtensionManagerUtil.getInstance().extendCreatedConfiguration(configuration, contextLocation)
         return true
     }
 
@@ -104,8 +100,7 @@ class KotlinTestClassGradleConfigurationProducer : TestClassGradleConfigurationP
         if (!IS_TEST_FRAMEWORK_PLUGIN_ENABLED) return false
 
         val leaf = context.location?.psiElement ?: return false
-        val module = context.module ?: return false
-        if (!module.platform.isJvm) return false
+        val module = context.module?.asJvmModule() ?: return false
 
         if (RunConfigurationProducer.getInstance(PatternConfigurationProducer::class.java).isMultipleElementsSelected(context)) {
             return false
@@ -141,8 +136,7 @@ class KotlinTestMethodGradleConfigurationProducer : TestMethodGradleConfiguratio
         if (!IS_TEST_FRAMEWORK_PLUGIN_ENABLED) return false
 
         val contextLocation = context.location ?: return false
-        val module = context.module ?: return false
-        if (!module.platform.isJvm) return false
+        context.module?.asJvmModule() ?: return false
 
         if (RunConfigurationProducer.getInstance(PatternConfigurationProducer::class.java).isMultipleElementsSelected(context)) {
             return false
@@ -156,7 +150,7 @@ class KotlinTestMethodGradleConfigurationProducer : TestMethodGradleConfiguratio
 
         if (!applyTestMethodConfiguration(configuration, context, psiMethod, containingClass)) return false
 
-        JavaRunConfigurationExtensionManager.getInstance().extendCreatedConfiguration(configuration, contextLocation)
+        JavaRunConfigurationExtensionManagerUtil.getInstance().extendCreatedConfiguration(configuration, contextLocation)
         return true
     }
 
@@ -168,8 +162,7 @@ class KotlinTestMethodGradleConfigurationProducer : TestMethodGradleConfiguratio
         }
 
         val contextLocation = context.location ?: return false
-        val module = context.module ?: return false
-        if (!module.platform.isJvm) return false
+        val module = context.module?.asJvmModule() ?: return false
 
         val psiMethod = getTestMethod(contextLocation.psiElement) ?: return false
 

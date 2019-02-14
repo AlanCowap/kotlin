@@ -22,8 +22,8 @@ import com.intellij.openapi.components.ApplicationComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.EditorFactory;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.updateSettings.impl.UpdateChecker;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -34,6 +34,8 @@ import org.jetbrains.kotlin.utils.PathUtil;
 
 import java.io.File;
 import java.io.IOException;
+
+import static org.jetbrains.kotlin.idea.TestResourceBundleKt.registerAdditionalResourceBundleInTests;
 
 public class PluginStartupComponent implements ApplicationComponent {
     private static final Logger LOG = Logger.getInstance(PluginStartupComponent.class);
@@ -52,6 +54,10 @@ public class PluginStartupComponent implements ApplicationComponent {
 
     @Override
     public void initComponent() {
+        if (ApplicationManager.getApplication().isUnitTestMode()) {
+            registerAdditionalResourceBundleInTests();
+        }
+
         registerPathVariable();
 
         try {
@@ -62,9 +68,9 @@ public class PluginStartupComponent implements ApplicationComponent {
             LOG.debug("Excluding Kotlin plugin updates using old API", throwable);
             UpdateChecker.getDisabledToUpdatePlugins().add("org.jetbrains.kotlin");
         }
-        EditorFactory.getInstance().getEventMulticaster().addDocumentListener(new DocumentAdapter() {
+        EditorFactory.getInstance().getEventMulticaster().addDocumentListener(new DocumentListener() {
             @Override
-            public void documentChanged(DocumentEvent e) {
+            public void documentChanged(@NotNull DocumentEvent e) {
                 VirtualFile virtualFile = FileDocumentManager.getInstance().getFile(e.getDocument());
                 if (virtualFile != null && virtualFile.getFileType() == KotlinFileType.INSTANCE) {
                     KotlinPluginUpdater.Companion.getInstance().kotlinFileEdited(virtualFile);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -13,9 +13,6 @@ package kotlin.collections
 // See: https://github.com/JetBrains/kotlin/tree/master/libraries/stdlib
 //
 
-import kotlin.*
-import kotlin.text.*
-import kotlin.comparisons.*
 import kotlin.random.*
 
 /**
@@ -150,6 +147,8 @@ public inline fun <K, V> Map<out K, V>.forEach(action: (Map.Entry<K, V>) -> Unit
 
 /**
  * Returns the first entry yielding the largest value of the given function or `null` if there are no entries.
+ * 
+ * @sample samples.collections.Collections.Aggregates.maxBy
  */
 @kotlin.internal.InlineOnly
 public inline fun <K, V, R : Comparable<R>> Map<out K, V>.maxBy(selector: (Map.Entry<K, V>) -> R): Map.Entry<K, V>? {
@@ -166,6 +165,8 @@ public inline fun <K, V> Map<out K, V>.maxWith(comparator: Comparator<in Map.Ent
 
 /**
  * Returns the first entry yielding the smallest value of the given function or `null` if there are no entries.
+ * 
+ * @sample samples.collections.Collections.Aggregates.minBy
  */
 public inline fun <K, V, R : Comparable<R>> Map<out K, V>.minBy(selector: (Map.Entry<K, V>) -> R): Map.Entry<K, V>? {
     return entries.minBy(selector)

@@ -20,9 +20,11 @@ import com.intellij.codeInsight.ContainerProvider
 import com.intellij.codeInsight.ExternalAnnotationsManager
 import com.intellij.codeInsight.InferredAnnotationsManager
 import com.intellij.codeInsight.runner.JavaMainMethodProvider
-import com.intellij.core.*
+import com.intellij.core.CoreApplicationEnvironment
+import com.intellij.core.CoreJavaFileManager
+import com.intellij.core.JavaCoreApplicationEnvironment
+import com.intellij.core.JavaCoreProjectEnvironment
 import com.intellij.ide.highlighter.JavaFileType
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.lang.MetaLanguage
 import com.intellij.lang.java.JavaParserDefinition
 import com.intellij.openapi.Disposable
@@ -33,10 +35,12 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.extensions.ExtensionsArea
 import com.intellij.openapi.fileTypes.FileTypeExtensionPoint
-import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.JDOMUtil
+import com.intellij.openapi.util.NotNullLazyValue
+import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtilRt
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.*
@@ -69,13 +73,11 @@ import org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PRO
 import org.jetbrains.kotlin.cli.common.config.ContentRoot
 import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.config.kotlinSourceRoots
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.STRONG_WARNING
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
-import org.jetbrains.kotlin.cli.common.script.CliScriptDefinitionProvider
-import org.jetbrains.kotlin.cli.common.script.CliScriptDependenciesProvider
-import org.jetbrains.kotlin.cli.common.script.CliScriptReportSink
 import org.jetbrains.kotlin.cli.common.toBooleanLenient
 import org.jetbrains.kotlin.cli.jvm.JvmRuntimeVersionsConsistencyChecker
 import org.jetbrains.kotlin.cli.jvm.config.*
@@ -110,13 +112,12 @@ import org.jetbrains.kotlin.resolve.jvm.modules.JavaModuleResolver
 import org.jetbrains.kotlin.resolve.lazy.declarations.CliDeclarationProviderFactoryService
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
 import org.jetbrains.kotlin.resolve.multiplatform.isCommonSource
-import org.jetbrains.kotlin.script.ScriptDefinitionProvider
-import org.jetbrains.kotlin.script.ScriptDependenciesProvider
-import org.jetbrains.kotlin.script.ScriptReportSink
-import org.jetbrains.kotlin.script.StandardScriptDefinition
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 import java.util.zip.ZipFile
+import javax.xml.stream.XMLInputFactory
 
 class KotlinCoreEnvironment private constructor(
     parentDisposable: Disposable,
@@ -218,39 +219,13 @@ class KotlinCoreEnvironment private constructor(
             extension.updateConfiguration(configuration)
         }
 
-        // If not disabled explicitly, we should always support at least the standard script definition
-        if (!configuration.getBoolean(JVMConfigurationKeys.DISABLE_STANDARD_SCRIPT_DEFINITION) &&
-            StandardScriptDefinition !in configuration.getList(JVMConfigurationKeys.SCRIPT_DEFINITIONS)
-        ) {
-            configuration.add(JVMConfigurationKeys.SCRIPT_DEFINITIONS, StandardScriptDefinition)
-        }
-
-        val scriptDefinitionProvider = ScriptDefinitionProvider.getInstance(project) as? CliScriptDefinitionProvider
-        if (scriptDefinitionProvider != null) {
-            scriptDefinitionProvider.setScriptDefinitionsSources(configuration.getList(JVMConfigurationKeys.SCRIPT_DEFINITIONS_SOURCES))
-            scriptDefinitionProvider.setScriptDefinitions(configuration.getList(JVMConfigurationKeys.SCRIPT_DEFINITIONS))
-
-            // Register new file extensions
-            val fileTypeRegistry = FileTypeRegistry.getInstance() as CoreFileTypeRegistry
-
-            scriptDefinitionProvider.getKnownFilenameExtensions().filter {
-                fileTypeRegistry.getFileTypeByExtension(it) != KotlinFileType.INSTANCE
-            }.forEach {
-                fileTypeRegistry.registerFileType(KotlinFileType.INSTANCE, it)
-            }
-        }
-
         sourceFiles += createKtFiles(project)
-        sourceFiles.sortBy { it.virtualFile.path }
 
-        if (scriptDefinitionProvider != null) {
-            ScriptDependenciesProvider.getInstance(project).let { importsProvider ->
-                configuration.addJvmClasspathRoots(
-                    sourceFiles.mapNotNull(importsProvider::getScriptDependencies)
-                        .flatMap { it.classpath }
-                        .distinctBy { it.absolutePath })
-            }
-        }
+        val (newSourcesClasspath, newSources, _) = collectScriptsCompilationDependencies(configuration, project, sourceFiles)
+        configuration.addJvmClasspathRoots(newSourcesClasspath)
+        sourceFiles += newSources
+
+        sourceFiles.sortBy { it.virtualFile.path }
 
         val jdkHome = configuration.get(JVMConfigurationKeys.JDK_HOME)
         val jrtFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JRT_PROTOCOL)
@@ -427,64 +402,12 @@ class KotlinCoreEnvironment private constructor(
 
     fun getSourceFiles(): List<KtFile> = sourceFiles
 
-    private fun createKtFiles(project: Project): List<KtFile> {
-        val sourceRoots = getSourceRootsCheckingForDuplicates()
+    private fun createKtFiles(project: Project): List<KtFile> =
+        createSourceFilesFromSourceRoots(configuration, project, getSourceRootsCheckingForDuplicates())
 
-        val localFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL)
-        val psiManager = PsiManager.getInstance(project)
-
-        val processedFiles = hashSetOf<VirtualFile>()
-        val result = mutableListOf<KtFile>()
-
-        val virtualFileCreator = PreprocessedFileCreator(project)
-
-        for ((sourceRootPath, isCommon) in sourceRoots) {
-            val vFile = localFileSystem.findFileByPath(sourceRootPath)
-            if (vFile == null) {
-                val message = "Source file or directory not found: $sourceRootPath"
-
-                val buildFilePath = configuration.get(JVMConfigurationKeys.MODULE_XML_FILE)
-                if (buildFilePath != null && Logger.isInitialized()) {
-                    LOG.warn("$message\n\nbuild file path: $buildFilePath\ncontent:\n${buildFilePath.readText()}")
-                }
-
-                report(ERROR, message)
-                continue
-            }
-
-            if (!vFile.isDirectory && vFile.fileType != KotlinFileType.INSTANCE) {
-                report(ERROR, "Source entry is not a Kotlin file: $sourceRootPath")
-                continue
-            }
-
-            for (file in File(sourceRootPath).walkTopDown()) {
-                if (!file.isFile) continue
-
-                val virtualFile = localFileSystem.findFileByPath(file.absolutePath)?.let(virtualFileCreator::create)
-                if (virtualFile != null && processedFiles.add(virtualFile)) {
-                    val psiFile = psiManager.findFile(virtualFile)
-                    if (psiFile is KtFile) {
-                        result.add(psiFile)
-                        if (isCommon) {
-                            psiFile.isCommonSource = true
-                        }
-                    }
-                }
-            }
-        }
-
-        return result
-    }
-
-    private fun report(severity: CompilerMessageSeverity, message: String) {
-        configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY).report(severity, message)
-    }
+    internal fun report(severity: CompilerMessageSeverity, message: String) = report(configuration, severity, message)
 
     companion object {
-        init {
-            setCompatibleBuild()
-        }
-
         private val LOG = Logger.getInstance(KotlinCoreEnvironment::class.java)
 
         private val APPLICATION_LOCK = Object()
@@ -495,7 +418,6 @@ class KotlinCoreEnvironment private constructor(
         fun createForProduction(
             parentDisposable: Disposable, configuration: CompilerConfiguration, configFiles: EnvironmentConfigFiles
         ): KotlinCoreEnvironment {
-            setCompatibleBuild()
             val appEnv = getOrCreateApplicationEnvironmentForProduction(configuration)
             // Disposing of the environment is unsafe in production then parallel builds are enabled, but turning it off universally
             // breaks a lot of tests, therefore it is disabled for production and enabled for tests
@@ -518,14 +440,6 @@ class KotlinCoreEnvironment private constructor(
             return environment
         }
 
-        @JvmStatic
-        private fun setCompatibleBuild() {
-            IdeaExtensionPoints.IDEA_COMPATIBLE_BUILD_NUMBER.let { buildNumber ->
-                PluginManagerCore.BUILD_NUMBER = buildNumber
-                System.getProperties().setProperty("idea.plugins.compatible.build", buildNumber)
-            }
-        }
-
         @TestOnly
         @JvmStatic
         fun createForTests(
@@ -543,6 +457,67 @@ class KotlinCoreEnvironment private constructor(
 
         // used in the daemon for jar cache cleanup
         val applicationEnvironment: JavaCoreApplicationEnvironment? get() = ourApplicationEnvironment
+
+        internal fun report(
+            configuration: CompilerConfiguration,
+            severity: CompilerMessageSeverity,
+            message: String,
+            location: CompilerMessageLocation? = null
+        ) {
+            configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY).report(severity, message, location)
+        }
+
+        internal fun createSourceFilesFromSourceRoots(
+            configuration: CompilerConfiguration,
+            project: Project,
+            sourceRoots: List<KotlinSourceRoot>,
+            reportLocation: CompilerMessageLocation? = null
+        ): MutableList<KtFile> {
+            val localFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL)
+            val psiManager = PsiManager.getInstance(project)
+
+            val processedFiles = hashSetOf<VirtualFile>()
+            val result = mutableListOf<KtFile>()
+
+            val virtualFileCreator = PreprocessedFileCreator(project)
+
+            for ((sourceRootPath, isCommon) in sourceRoots) {
+                val vFile = localFileSystem.findFileByPath(sourceRootPath)
+                if (vFile == null) {
+                    val message = "Source file or directory not found: $sourceRootPath"
+
+                    val buildFilePath = configuration.get(JVMConfigurationKeys.MODULE_XML_FILE)
+                    if (buildFilePath != null && Logger.isInitialized()) {
+                        KotlinCoreEnvironment.LOG.warn("$message\n\nbuild file path: $buildFilePath\ncontent:\n${buildFilePath.readText()}")
+                    }
+
+                    report(configuration, ERROR, message, reportLocation)
+                    continue
+                }
+
+                if (!vFile.isDirectory && vFile.fileType != KotlinFileType.INSTANCE) {
+                    report(configuration, ERROR, "Source entry is not a Kotlin file: $sourceRootPath", reportLocation)
+                    continue
+                }
+
+                for (file in File(sourceRootPath).walkTopDown()) {
+                    if (!file.isFile) continue
+
+                    val virtualFile = localFileSystem.findFileByPath(file.absolutePath)?.let(virtualFileCreator::create)
+                    if (virtualFile != null && processedFiles.add(virtualFile)) {
+                        val psiFile = psiManager.findFile(virtualFile)
+                        if (psiFile is KtFile) {
+                            result.add(psiFile)
+                            if (isCommon) {
+                                psiFile.isCommonSource = true
+                            }
+                        }
+                    }
+                }
+            }
+
+            return result
+        }
 
         private fun getOrCreateApplicationEnvironmentForProduction(configuration: CompilerConfiguration): JavaCoreApplicationEnvironment {
             synchronized(APPLICATION_LOCK) {
@@ -609,6 +584,8 @@ class KotlinCoreEnvironment private constructor(
         }
 
         private fun registerApplicationExtensionPointsAndExtensionsFrom(configuration: CompilerConfiguration, configFilePath: String) {
+            workaroundIbmJdkStaxReportCdataEventIssue()
+
             fun File.hasConfigFile(configFile: String): Boolean =
                 if (isDirectory) File(this, "META-INF" + File.separator + configFile).exists()
                 else try {
@@ -621,16 +598,47 @@ class KotlinCoreEnvironment private constructor(
 
             val pluginRoot =
                 configuration.get(CLIConfigurationKeys.INTELLIJ_PLUGIN_ROOT)?.let(::File)
-                    ?: configuration.get(CLIConfigurationKeys.COMPILER_JAR_LOCATOR)?.compilerJar
                     ?: PathUtil.getResourcePathForClass(this::class.java).takeIf { it.hasConfigFile(configFilePath) }
                     // hack for load extensions when compiler run directly from project directory (e.g. in tests)
-                    ?: File("idea/src").takeIf { it.hasConfigFile(configFilePath) }
+                    ?: File("idea/resources").takeIf { it.hasConfigFile(configFilePath) }
                     ?: throw IllegalStateException(
                         "Unable to find extension point configuration $configFilePath " +
                                 "(cp:\n  ${(Thread.currentThread().contextClassLoader as? UrlClassLoader)?.urls?.joinToString("\n  ") { it.file }})"
                     )
 
             CoreApplicationEnvironment.registerExtensionPointAndExtensions(pluginRoot, configFilePath, Extensions.getRootArea())
+        }
+
+        private fun workaroundIbmJdkStaxReportCdataEventIssue() {
+            if (!SystemInfo.isIbmJvm) return
+
+            // On IBM JDK, XMLInputFactory does not support "report-cdata-event" property, but JDOMUtil sets it unconditionally in the
+            // static XML_INPUT_FACTORY field and fails with an exception (Logger.error throws exception in the compiler) if unsuccessful.
+            // Until this is fixed in the platform, we workaround the issue by setting that field to a value that does not attempt
+            // to set the unsupported property.
+            // See IDEA-206446 for more information
+            val field = JDOMUtil::class.java.getDeclaredField("XML_INPUT_FACTORY")
+            field.isAccessible = true
+            Field::class.java.getDeclaredField("modifiers")
+                .apply { isAccessible = true }
+                .setInt(field, field.modifiers and Modifier.FINAL.inv())
+            field.set(null, object : NotNullLazyValue<XMLInputFactory>() {
+                override fun compute(): XMLInputFactory {
+                    val factory: XMLInputFactory = try {
+                        // otherwise wst can be used (in tests/dev run)
+                        val clazz = Class.forName("com.sun.xml.internal.stream.XMLInputFactoryImpl")
+                        clazz.newInstance() as XMLInputFactory
+                    } catch (e: Exception) {
+                        // ok, use random
+                        XMLInputFactory.newFactory()
+                    }
+
+                    factory.setProperty(XMLInputFactory.IS_COALESCING, true)
+                    factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
+                    factory.setProperty(XMLInputFactory.SUPPORT_DTD, false)
+                    return factory
+                }
+            })
         }
 
         private fun registerApplicationServicesForCLI(applicationEnvironment: JavaCoreApplicationEnvironment) {
@@ -666,18 +674,9 @@ class KotlinCoreEnvironment private constructor(
         @JvmStatic
         fun registerProjectServices(projectEnvironment: JavaCoreProjectEnvironment, messageCollector: MessageCollector?) {
             with(projectEnvironment.project) {
-                val scriptDefinitionProvider = CliScriptDefinitionProvider()
-                registerService(ScriptDefinitionProvider::class.java, scriptDefinitionProvider)
-                registerService(
-                    ScriptDependenciesProvider::class.java,
-                    CliScriptDependenciesProvider(projectEnvironment.project)
-                )
                 registerService(KotlinJavaPsiFacade::class.java, KotlinJavaPsiFacade(this))
                 registerService(KtLightClassForFacade.FacadeStubCache::class.java, KtLightClassForFacade.FacadeStubCache(this))
                 registerService(ModuleAnnotationsResolver::class.java, CliModuleAnnotationsResolver())
-                if (messageCollector != null) {
-                    registerService(ScriptReportSink::class.java, CliScriptReportSink(messageCollector))
-                }
             }
         }
 
@@ -715,3 +714,4 @@ class KotlinCoreEnvironment private constructor(
         }
     }
 }
+

@@ -5,8 +5,11 @@
 
 package org.jetbrains.kotlin.js.test
 
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.config.*
-import org.jetbrains.kotlin.ir.backend.js.Result
+import org.jetbrains.kotlin.ir.backend.js.ModuleType
+import org.jetbrains.kotlin.ir.backend.js.CompiledModule
 import org.jetbrains.kotlin.ir.backend.js.compile
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.js.config.JsConfig
@@ -16,88 +19,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.test.TargetBackend
 import java.io.File
 
-private val runtimeSourcesCommon = listOfKtFilesFrom(
-    "core/builtins/src/kotlin",
-    "libraries/stdlib/common/src",
-    "libraries/stdlib/src/kotlin/",
-    "libraries/stdlib/js/src/kotlin",
-    "libraries/stdlib/js/src/generated",
-    "libraries/stdlib/js/irRuntime",
-    "libraries/stdlib/js/runtime",
-    "libraries/stdlib/unsigned",
-
-    "core/builtins/native/kotlin/Annotation.kt",
-    "core/builtins/native/kotlin/Number.kt",
-    "core/builtins/native/kotlin/Comparable.kt",
-    "core/builtins/native/kotlin/Collections.kt",
-    "core/builtins/native/kotlin/Iterator.kt",
-    "core/builtins/native/kotlin/CharSequence.kt",
-
-    BasicBoxTest.COMMON_FILES_DIR_PATH
-) - listOfKtFilesFrom(
-    "libraries/stdlib/common/src/kotlin/JvmAnnotationsH.kt",
-    "libraries/stdlib/src/kotlin/annotations/Multiplatform.kt",
-
-    // TODO: Support Int.pow
-    "libraries/stdlib/js/src/kotlin/random/PlatformRandom.kt",
-
-    // TODO: Unify exceptions
-    "libraries/stdlib/common/src/kotlin/ExceptionsH.kt",
-
-    // Fails with: EXPERIMENTAL_IS_NOT_ENABLED
-    "libraries/stdlib/common/src/kotlin/annotations/Annotations.kt",
-
-    // Conflicts with libraries/stdlib/js/src/kotlin/annotations.kt
-    "libraries/stdlib/js/runtime/hacks.kt",
-
-    // TODO: Reuse in IR BE
-    "libraries/stdlib/js/runtime/Enum.kt",
-
-    // JS-specific optimized version of emptyArray() already defined
-    "core/builtins/src/kotlin/ArrayIntrinsics.kt",
-
-    // Unnecessary for now
-    "libraries/stdlib/js/src/kotlin/dom",
-    "libraries/stdlib/js/src/kotlin/browser",
-
-    // TODO: Unify exceptions
-    "libraries/stdlib/js/src/kotlin/exceptions.kt",
-
-    // TODO: fix compilation issues in arrayPlusCollection
-    // Replaced with irRuntime/kotlinHacks.kt
-    "libraries/stdlib/js/src/kotlin/kotlin.kt",
-
-    // Full version is defined in stdlib
-    // This file is useful for smaller subset of runtime sources
-    "libraries/stdlib/js/irRuntime/rangeExtensions.kt",
-
-    // Mostly array-specific stuff
-    "libraries/stdlib/js/src/kotlin/builtins.kt",
-
-    // Inlining of js fun doesn't update the variables inside
-    "libraries/stdlib/js/src/kotlin/jsTypeOf.kt"
-)
-
-
-private val coroutine12Files = listOfKtFilesFrom(
-    "libraries/stdlib/js/irRuntime/coroutines_12"
-)
-
-private val coroutine13Files = listOfKtFilesFrom(
-    "libraries/stdlib/coroutines/common",
-    "libraries/stdlib/coroutines/js/src/kotlin/coroutines/SafeContinuationJs.kt",
-    "libraries/stdlib/coroutines/src",
-    // TODO: merge coroutines_13 with JS BE coroutines
-    "libraries/stdlib/js/irRuntime/coroutines_13"
-)
-
-private var runtimeResult: Result? = null
-private val runtimeFile = File("js/js.translator/testData/out/irBox/testRuntime.js")
-
-private val runtimeSources_12 = (runtimeSourcesCommon - coroutine13Files + coroutine12Files).distinct()
-private val runtimeSources_13 = (runtimeSourcesCommon - coroutine12Files + coroutine13Files).distinct()
-
-private val runtimeSources = runtimeSources_13
+private var runtimeResults = mutableMapOf<JsIrTestRuntime, CompiledModule>()
 
 abstract class BasicIrBoxTest(
     pathToTestDir: String,
@@ -115,9 +37,12 @@ abstract class BasicIrBoxTest(
     targetBackend = TargetBackend.JS_IR
 ) {
 
-    override var skipMinification = true
+    override val skipMinification = true
 
-    private val compilationCache = mutableMapOf<String, Result>()
+    // TODO Design incremental compilation for IR and add test support
+    override val incrementalCompilationChecksEnabled = false
+
+    private val compilationCache = mutableMapOf<String, CompiledModule>()
 
     override fun doTest(filePath: String, expectedResult: String, mainCallParameters: MainCallParameters, coroutinesPackage: String) {
         compilationCache.clear()
@@ -134,12 +59,24 @@ abstract class BasicIrBoxTest(
         incrementalData: IncrementalData,
         remap: Boolean,
         testPackage: String?,
-        testFunction: String
+        testFunction: String,
+        runtime: JsIrTestRuntime,
+        isMainModule: Boolean
     ) {
         val filesToCompile = units
             .map { (it as TranslationUnit.SourceFile).file }
             // TODO: split input files to some parts (global common, local common, test)
             .filterNot { it.virtualFilePath.contains(BasicBoxTest.COMMON_FILES_DIR_PATH) }
+
+//        config.configuration.put(CommonConfigurationKeys.EXCLUDED_ELEMENTS_FROM_DUMPING, setOf("<JS_IR_RUNTIME>"))
+        config.configuration.put(
+            CommonConfigurationKeys.PHASES_TO_VALIDATE_AFTER,
+            setOf(
+                "RemoveInlineFunctionsWithReifiedTypeParametersLowering",
+                "InnerClassConstructorCallsLowering",
+                "InlineClassLowering", "ConstLowering"
+            )
+        )
 
         val runtimeConfiguration = config.configuration.copy()
 
@@ -151,31 +88,48 @@ abstract class BasicIrBoxTest(
                 LanguageFeature.MultiPlatformProjects to LanguageFeature.State.ENABLED
             ),
             analysisFlags = mapOf(
-                AnalysisFlag.useExperimental to listOf("kotlin.contracts.ExperimentalContracts", "kotlin.Experimental"),
-                AnalysisFlag.allowResultReturnType to true
+                AnalysisFlags.useExperimental to listOf("kotlin.contracts.ExperimentalContracts", "kotlin.Experimental"),
+                AnalysisFlags.allowResultReturnType to true
             )
         )
 
-        if (runtimeResult == null) {
-            runtimeResult = compile(config.project, runtimeSources.map(::createPsiFile), runtimeConfiguration)
-            runtimeFile.write(runtimeResult!!.generatedCode)
+        val runtimeFile = File(runtime.path)
+        val runtimeResult = runtimeResults.getOrPut(runtime) {
+            runtimeConfiguration.put(CommonConfigurationKeys.MODULE_NAME, "JS_IR_RUNTIME")
+            val result = compile(config.project, runtime.sources.map(::createPsiFile), runtimeConfiguration, moduleType = ModuleType.TEST_RUNTIME)
+            runtimeFile.write(result.generatedCode!!)
+            result
         }
 
-        val dependencyPaths = config.configuration[JSConfigurationKeys.LIBRARIES]!!
-        val dependencies = listOf(runtimeResult!!.moduleDescriptor) + dependencyPaths.mapNotNull { compilationCache[it]?.moduleDescriptor }
-        val irDependencies = listOf(runtimeResult!!.moduleFragment) + compilationCache.values.map { it.moduleFragment }
+        val dependencyNames = config.configuration[JSConfigurationKeys.LIBRARIES]!!.map { File(it).name }
+        val dependencies = listOf(runtimeResult) + dependencyNames.mapNotNull {
+            compilationCache[it]
+        }
+
+//        config.configuration.put(CommonConfigurationKeys.PHASES_TO_DUMP_STATE, setOf("UnitMaterializationLowering"))
+//        config.configuration.put(CommonConfigurationKeys.PHASES_TO_DUMP_STATE_BEFORE, setOf("ReturnableBlockLowering"))
+//        config.configuration.put(CommonConfigurationKeys.PHASES_TO_DUMP_STATE_AFTER, setOf("MultipleCatchesLowering"))
+//        config.configuration.put(CommonConfigurationKeys.PHASES_TO_VALIDATE, setOf("ALL"))
 
         val result = compile(
             config.project,
             filesToCompile,
             config.configuration,
-            FqName((testPackage?.let { "$it." } ?: "") + testFunction),
+            listOf(FqName((testPackage?.let { "$it." } ?: "") + testFunction)),
             dependencies,
-            irDependencies)
+            runtimeResult,
+            moduleType = if (isMainModule) ModuleType.MAIN else ModuleType.SECONDARY
+        )
 
-        compilationCache[outputFile.absolutePath.let { it.substring(0, it.length - 2)} + "meta.js"] = result
+        compilationCache[outputFile.name.replace(".js", ".meta.js")] = result
 
-        outputFile.write(result.generatedCode)
+        val generatedCode = result.generatedCode
+        if (generatedCode != null) {
+            // Prefix to help node.js runner find runtime
+            val runtimePrefix = "// RUNTIME: [\"${runtimeFile.path}\"]\n"
+            val wrappedCode = wrapWithModuleEmulationMarkers(generatedCode, moduleId = config.moduleId, moduleKind = config.moduleKind)
+            outputFile.write(runtimePrefix + wrappedCode)
+        }
     }
 
     override fun runGeneratedCode(
@@ -184,24 +138,15 @@ abstract class BasicIrBoxTest(
         testPackage: String?,
         testFunction: String,
         expectedResult: String,
-        withModuleSystem: Boolean
+        withModuleSystem: Boolean,
+        runtime: JsIrTestRuntime
     ) {
         // TODO: should we do anything special for module systems?
         // TODO: return list of js from translateFiles and provide then to this function with other js files
-        NashornIrJsTestChecker.check(jsFiles, null, null, testFunction, expectedResult, false)
+        nashornIrJsTestCheckers[runtime]!!.check(jsFiles, testModuleName, null, testFunction, expectedResult, withModuleSystem)
     }
 }
 
-private fun listOfKtFilesFrom(vararg paths: String): List<String> {
-    val currentDir = File(".")
-    return paths.flatMap { path ->
-        File(path)
-            .walkTopDown()
-            .filter { it.extension == "kt" }
-            .map { it.relativeToOrSelf(currentDir).path }
-            .asIterable()
-    }.distinct()
-}
 
 private fun File.write(text: String) {
     parentFile.mkdirs()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -64,6 +64,11 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("apiVersionLessThanLanguageUsingArgfile.args")
         public void testApiVersionLessThanLanguageUsingArgfile() throws Exception {
             runTest("compiler/testData/cli/jvm/apiVersionLessThanLanguageUsingArgfile.args");
+        }
+
+        @TestMetadata("argfileWithEmptyArgument.args")
+        public void testArgfileWithEmptyArgument() throws Exception {
+            runTest("compiler/testData/cli/jvm/argfileWithEmptyArgument.args");
         }
 
         @TestMetadata("argfileWithEscaping.args")
@@ -554,6 +559,11 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("suppressAllWarningsJvm.args")
         public void testSuppressAllWarningsJvm() throws Exception {
             runTest("compiler/testData/cli/jvm/suppressAllWarningsJvm.args");
+        }
+
+        @TestMetadata("suspensionPointInMonitor.args")
+        public void testSuspensionPointInMonitor() throws Exception {
+            runTest("compiler/testData/cli/jvm/suspensionPointInMonitor.args");
         }
 
         @TestMetadata("syntheticAccessorForPropertiesSignatureClash.args")

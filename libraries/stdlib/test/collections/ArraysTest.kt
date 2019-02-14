@@ -1,9 +1,10 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
 @file:Suppress("SIGNED_CONSTANT_CONVERTED_TO_UNSIGNED")
+
 package test.collections
 
 import test.assertStaticTypeIs
@@ -11,7 +12,6 @@ import test.assertTypeEquals
 import test.collections.behaviors.*
 import test.comparisons.STRING_CASE_INSENSITIVE_ORDER
 import kotlin.test.*
-import kotlin.comparisons.*
 import kotlin.random.Random
 
 fun <T> assertArrayNotSameButEquals(expected: Array<out T>, actual: Array<out T>, message: String = "") { assertTrue(expected !== actual && expected contentEquals actual, message) }
@@ -199,11 +199,26 @@ class ArraysTest {
     }
 
     @Test fun contentEquals() {
-        val arr1 = arrayOf("a", 1, null)
-        val arr2 = arrayOf(*arr1)
-        assertTrue(arr1 contentEquals arr2)
-        val arr3 = arr2.reversedArray()
-        assertFalse(arr1 contentEquals arr3)
+        fun <T> checkArray(array: T, copy: T.() -> T, toList: T.() -> List<*>, check: (T, T) -> Boolean, modify: T.() -> Unit) {
+            val list = toList(array)
+            val array2 = copy(array)
+            val list2 = toList(array2)
+            assertEquals(list, list2)
+            assertNotSame(array, array2)
+            assertTrue(check(array, array2), "Copy of array should have the same content: original $list, modified $list2")
+
+            modify(array2)
+            val list2m = toList(array2)
+            assertNotEquals(list, list2m)
+            assertFalse(check(array, array2), "Modified array should be different: original $list, modified $list2m")
+        }
+
+        checkArray(arrayOf("a", 1, null), { copyOf() }, { toList() }, { a1, a2 -> a1 contentEquals a2 }, { reverse() })
+        checkArray(byteArrayOf(1, 2, 3), { copyOf() }, { toList() }, { a1, a2 -> a1 contentEquals a2 }, { reverse() })
+        checkArray(intArrayOf(1, 2, 3), { copyOf() }, { toList() }, { a1, a2 -> a1 contentEquals a2 }, { reverse() })
+        checkArray(longArrayOf(1, 2, 3), { copyOf() }, { toList() }, { a1, a2 -> a1 contentEquals a2 }, { reverse() })
+        checkArray(doubleArrayOf(Double.NaN, -0.0, 0.0, Double.POSITIVE_INFINITY, 1.0),
+                   { copyOf() }, { toList() }, { a1, a2 -> a1 contentEquals a2 }, { this[1] = 0.0 })
     }
 
     @Test fun contentDeepEquals() {
@@ -222,6 +237,13 @@ class ArraysTest {
 
         arr4[2] = arr3
         assertFalse(arr3 contentDeepEquals arr4)
+
+        val arr5 = arrayOf(doubleArrayOf(-0.0, Double.NaN))
+        val arr6 = arrayOf(doubleArrayOf(0.0, Double.NaN))
+        assertFalse(arr5 contentDeepEquals arr6)
+
+        arr5[0][0] = 0.0
+        assertTrue(arr5 contentDeepEquals arr6)
     }
 
     @Test fun contentToString() {
@@ -265,6 +287,8 @@ class ArraysTest {
         intArrayOf(1, Int.MAX_VALUE, Int.MIN_VALUE).let { assertEquals(it.toList().hashCode(), it.contentHashCode()) }
         byteArrayOf(1, Byte.MAX_VALUE, Byte.MIN_VALUE).let { assertEquals(it.toList().hashCode(), it.contentHashCode()) }
         charArrayOf('a', Char.MAX_VALUE, Char.MIN_VALUE).let { assertEquals(it.toList().hashCode(), it.contentHashCode()) }
+        doubleArrayOf(1.0, -0.0, 0.0, Double.NaN, Double.POSITIVE_INFINITY).let { assertEquals(it.toList().hashCode(), it.contentHashCode()) }
+        floatArrayOf(1.0f, -0.0f, 0.0f, Float.NaN, Float.POSITIVE_INFINITY).let { assertEquals(it.toList().hashCode(), it.contentHashCode()) }
     }
 
     @Test fun contentDeepHashCode() {
@@ -275,6 +299,11 @@ class ArraysTest {
         val intList2 = listOf(listOf(1, 2), listOf(3, 4))
 
         assertEquals(intList2.hashCode(), intArray2.contentDeepHashCode())
+
+        val doubleArray2 = arrayOf(doubleArrayOf(1.0, Double.NaN), doubleArrayOf(-0.0, 0.0))
+        val doubleList2 = listOf(listOf(1.0, Double.NaN), listOf(-0.0, 0.0))
+
+        assertEquals(doubleList2.hashCode(), doubleArray2.contentDeepHashCode())
 
         val uintArray2 = arrayOf(uintArrayOf(1u, 2u), uintArrayOf(3u, 4u))
         val uintList2 = listOf(listOf(1u, 2u), listOf(3u, 4u))
@@ -1383,6 +1412,21 @@ class ArraysTest {
         }
     }
 
+    @Test fun sortStable() {
+        val keyRange = 'A'..'D'
+        for (size in listOf(10, 100, 2000)) {
+            val array = Array(size) { index -> Sortable(keyRange.random(), index) }
+
+            array.sortedArray().assertStableSorted()
+            array.sortedArrayDescending().assertStableSorted(descending = true)
+
+            array.sort()
+            array.assertStableSorted()
+            array.sortDescending()
+            array.assertStableSorted(descending = true)
+        }
+    }
+
     @Test fun sortByInPlace() {
         val data = arrayOf("aa" to 20, "ab" to 3, "aa" to 3)
         data.sortBy { it.second }
@@ -1400,6 +1444,22 @@ class ArraysTest {
         val indices = values.indices.toList().toIntArray()
 
         assertEquals(listOf(1, 2, 0), indices.sortedBy { values[it] })
+    }
+
+    @Test fun sortByStable() {
+        val keyRange = 'A'..'D'
+        for (size in listOf(10, 100, 2000)) {
+            val array = Array(size) { index -> Sortable(keyRange.random(), index) }
+
+            array.sortedBy { it.key }.assertStableSorted()
+            array.sortedByDescending { it.key }.assertStableSorted(descending = true)
+
+            array.sortBy { it.key }
+            array.assertStableSorted()
+
+            array.sortByDescending { it.key }
+            array.assertStableSorted(descending = true)
+        }
     }
 
     @Test fun sortedNullableBy() {
@@ -1427,6 +1487,10 @@ class ArraysTest {
         array.iterator().assertSorted { a, b -> comparator.compare(a, b) <= 0 }
     }
 }
+
+
+fun <K : Comparable<K>> Array<out Sortable<K>>.assertStableSorted(descending: Boolean = false) =
+    iterator().assertStableSorted(descending = descending)
 
 private class ArraySortedChecker<A, T>(val array: A, val comparator: Comparator<in T>) {
     public fun <R> checkSorted(sorted: A.() -> R, sortedDescending: A.() -> R, iterator: R.() -> Iterator<T>) {

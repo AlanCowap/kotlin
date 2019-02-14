@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.backend.common.ClassLoweringPass
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
+import org.jetbrains.kotlin.backend.common.lower.replaceThisByStaticReference
+import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.common.runOnFilePostfix
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
@@ -28,19 +30,24 @@ import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
 import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.util.*
-import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.annotations.JVM_STATIC_ANNOTATION_FQ_NAME
 import org.jetbrains.org.objectweb.asm.Opcodes
 
+internal val jvmStaticAnnotationPhase = makeIrFilePhase(
+    ::JvmStaticAnnotationLowering,
+    name = "JvmStaticAnnotation",
+    description = "Handle JvmStatic annotations"
+)
+
 /*
  * For @JvmStatic functions within companion objects of classes, we synthesize proxy static functions that redirect
  * to the actual implementation.
  * For @JvmStatic functions within static objects, we make the actual function static and modify all call sites.
  */
-class JvmStaticAnnotationLowering(val context: JvmBackendContext) : IrElementTransformerVoid(), FileLoweringPass {
+private class JvmStaticAnnotationLowering(val context: JvmBackendContext) : IrElementTransformerVoid(), FileLoweringPass {
     override fun lower(irFile: IrFile) {
         CompanionObjectJvmStaticLowering(context).runOnFilePostfix(irFile)
 
@@ -95,9 +102,9 @@ private class CompanionObjectJvmStaticLowering(val context: JvmBackendContext) :
         val proxyIrFunction = IrFunctionImpl(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET,
             JvmLoweredDeclarationOrigin.JVM_STATIC_WRAPPER,
-            proxyFunctionSymbol
+            proxyFunctionSymbol,
+            returnType = target.returnType
         )
-        proxyIrFunction.returnType = target.returnType
         proxyIrFunction.createParameterDeclarations()
 
         proxyIrFunction.body = createProxyBody(target, proxyIrFunction, companion)
@@ -156,26 +163,7 @@ private class SingletonObjectJvmStaticLowering(
     }
 
     fun modifyBody(irFunction: IrFunction, irClass: IrClass, oldDispatchReceiverParameter: IrValueParameter) {
-        irFunction.body = irFunction.body?.transform(ReplaceThisByStaticReference(context, irClass, oldDispatchReceiverParameter), null)
-    }
-}
-
-private class ReplaceThisByStaticReference(
-    val context: JvmBackendContext,
-    val irClass: IrClass,
-    val oldThisReceiverParameter: IrValueParameter
-) : IrElementTransformer<Nothing?> {
-    override fun visitGetValue(expression: IrGetValue, data: Nothing?): IrExpression {
-        if (expression.symbol == oldThisReceiverParameter.symbol) {
-            val instanceField = context.declarationFactory.getFieldForObjectInstance(irClass)
-            return IrGetFieldImpl(
-                expression.startOffset,
-                expression.endOffset,
-                instanceField.symbol,
-                irClass.defaultType
-            )
-        }
-        return super.visitGetValue(expression, data)
+        irFunction.body = irFunction.body?.replaceThisByStaticReference(context, irClass, oldDispatchReceiverParameter)
     }
 }
 

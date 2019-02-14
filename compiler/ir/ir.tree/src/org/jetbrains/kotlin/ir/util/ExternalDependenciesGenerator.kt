@@ -25,10 +25,11 @@ import org.jetbrains.kotlin.resolve.BindingContext
 class ExternalDependenciesGenerator(
     moduleDescriptor: ModuleDescriptor,
     val symbolTable: SymbolTable,
-    val irBuiltIns: IrBuiltIns
+    val irBuiltIns: IrBuiltIns,
+    val deserializer: IrDeserializer? = null
 ) {
     private val stubGenerator = DeclarationStubGenerator(
-        moduleDescriptor, symbolTable, IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB, irBuiltIns.languageVersionSettings
+        moduleDescriptor, symbolTable, IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB, irBuiltIns.languageVersionSettings, deserializer
     )
 
     fun generateUnboundSymbolsAsDependencies(irModule: IrModuleFragment, bindingContext: BindingContext? = null) {
@@ -49,7 +50,7 @@ class ExternalDependenciesGenerator(
                 stubGenerator.generateEnumEntryStub(it.descriptor)
             }
             ArrayList(symbolTable.unboundFields).forEach {
-                stubGenerator.generatePropertyStub(it.descriptor, bindingContext)
+                stubGenerator.generateFieldStub(it.descriptor, bindingContext)
             }
             ArrayList(symbolTable.unboundSimpleFunctions).forEach {
                 stubGenerator.generateFunctionStub(it.descriptor)
@@ -57,6 +58,8 @@ class ExternalDependenciesGenerator(
             ArrayList(symbolTable.unboundTypeParameters).forEach {
                 stubGenerator.generateOrGetTypeParameterStub(it.descriptor)
             }
+
+            deserializer?.declareForwardDeclarations()
 
             assert(symbolTable.unboundClasses.isEmpty())
             assert(symbolTable.unboundConstructors.isEmpty())

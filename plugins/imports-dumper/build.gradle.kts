@@ -7,7 +7,7 @@ plugins {
 }
 
 repositories {
-    maven("http://dl.bintray.com/kotlin/kotlinx")
+    maven("https://dl.bintray.com/kotlin/kotlinx")
 }
 
 val kotlinxSerializationVersion = "0.4.2"

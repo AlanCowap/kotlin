@@ -5,50 +5,40 @@
 
 package org.jetbrains.kotlin.backend.jvm.descriptors
 
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassDescriptor
 import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
-import org.jetbrains.kotlin.backend.jvm.lower.createFunctionAndMapVariables
 import org.jetbrains.kotlin.backend.jvm.lower.createStaticFunctionWithReceivers
 import org.jetbrains.kotlin.builtins.CompanionObjectMapping.isMappedIntrinsicCompanionObject
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.codegen.descriptors.FileClassDescriptor
+import org.jetbrains.kotlin.codegen.OwnerKind
 import org.jetbrains.kotlin.codegen.state.GenerationState
-import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.ClassConstructorDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl
-import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
-import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
-import org.jetbrains.kotlin.ir.SourceManager
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
+import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.toIrType
 import org.jetbrains.kotlin.ir.types.toKotlinType
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.dump
-import org.jetbrains.kotlin.ir.util.isInterface
-import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.psi2ir.PsiSourceManager
-import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
 import org.jetbrains.org.objectweb.asm.Opcodes
 import java.util.*
 
 class JvmDeclarationFactory(
-    private val psiSourceManager: PsiSourceManager,
-    private val builtIns: KotlinBuiltIns,
-    private val state: GenerationState
+    private val state: GenerationState,
+    private val symbolTable: SymbolTable
 ) : DeclarationFactory {
     private val singletonFieldDeclarations = HashMap<IrSymbolOwner, IrField>()
     private val outerThisDeclarations = HashMap<IrClass, IrField>()
@@ -63,24 +53,11 @@ class JvmDeclarationFactory(
             IrFieldImpl(
                 enumEntry.startOffset,
                 enumEntry.endOffset,
-                JvmLoweredDeclarationOrigin.FIELD_FOR_ENUM_ENTRY,
+                IrDeclarationOrigin.FIELD_FOR_ENUM_ENTRY,
                 symbol,
                 type
             )
         }
-
-    fun createFileClassDescriptor(fileEntry: SourceManager.FileEntry, packageFragment: PackageFragmentDescriptor): FileClassDescriptor {
-        val ktFile = psiSourceManager.getKtFile(fileEntry as PsiSourceManager.PsiFileEntry)
-                ?: throw AssertionError("Unexpected file entry: $fileEntry")
-        val fileClassInfo = JvmFileClassUtil.getFileClassInfoNoResolve(ktFile)
-        val sourceElement = KotlinSourceElement(ktFile)
-        return FileClassDescriptorImpl(
-            fileClassInfo.fileClassFqName.shortName(), packageFragment,
-            listOf(builtIns.anyType),
-            sourceElement,
-            Annotations.EMPTY // TODO file annotations
-        )
-    }
 
     override fun getOuterThisField(innerClass: IrClass): IrField =
         if (!innerClass.isInner) throw AssertionError("Class is not inner: ${innerClass.dump()}")
@@ -133,14 +110,23 @@ class JvmDeclarationFactory(
             oldDescriptor.modality,
             oldDescriptor.visibility)
         val symbol = IrConstructorSymbolImpl(newDescriptor)
-        return IrConstructorImpl(oldConstructor.startOffset, oldConstructor.endOffset, oldConstructor.origin, symbol).also { constructor ->
+        return IrConstructorImpl(
+            oldConstructor.startOffset,
+            oldConstructor.endOffset,
+            oldConstructor.origin,
+            symbol,
+            oldConstructor.returnType
+        ).also { constructor ->
             newValueParameters.mapIndexedTo(constructor.valueParameters) { i, v ->
                 constructor.parent = oldConstructor.parent
-                constructor.returnType = oldConstructor.returnType
                 if (i == 0) {
                     IrValueParameterImpl(
                         UNDEFINED_OFFSET, UNDEFINED_OFFSET,
-                        JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS, IrValueParameterSymbolImpl(v), outerThisType.toIrType()!!, null)
+                        JvmLoweredDeclarationOrigin.FIELD_FOR_OUTER_THIS,
+                        IrValueParameterSymbolImpl(v),
+                        outerThisType.toIrType(symbolTable)!!,
+                        null
+                    )
                 } else {
                     val oldParameter = oldConstructor.valueParameters[i - 1]
                     IrValueParameterImpl(
@@ -179,7 +165,7 @@ class JvmDeclarationFactory(
             return IrFieldImpl(
                 UNDEFINED_OFFSET,
                 UNDEFINED_OFFSET,
-                JvmLoweredDeclarationOrigin.FIELD_FOR_OBJECT_INSTANCE,
+                IrDeclarationOrigin.FIELD_FOR_OBJECT_INSTANCE,
                 symbol,
                 singleton.defaultType
             )
@@ -201,42 +187,39 @@ class JvmDeclarationFactory(
     }
 
     fun getDefaultImplsFunction(interfaceFun: IrFunction): IrFunction {
-        assert(interfaceFun.parentAsClass.isInterface) { "Parent of ${interfaceFun.dump()} should be interface" }
+        val parent = interfaceFun.parentAsClass
+        assert(parent.isInterface) { "Parent of ${interfaceFun.dump()} should be interface" }
         return defaultImplsMethods.getOrPut(interfaceFun) {
             val defaultImpls = getDefaultImplsClass(interfaceFun.parentAsClass)
 
-            createDefaultImplFunDescriptor(
-                defaultImpls.descriptor as DefaultImplsClassDescriptor,
-                interfaceFun.descriptor.original,
-                interfaceFun.parentAsClass.descriptor,
-                state.typeMapper
-            ).createFunctionAndMapVariables(interfaceFun, origin = JvmLoweredDeclarationOrigin.DEFAULT_IMPLS)
+            val name = Name.identifier(state.typeMapper.mapFunctionName(interfaceFun.descriptor.original, OwnerKind.IMPLEMENTATION))
+            createStaticFunctionWithReceivers(
+                defaultImpls, name, interfaceFun,
+                dispatchReceiverType = parent.defaultType,
+                origin = JvmLoweredDeclarationOrigin.DEFAULT_IMPLS
+            )
         }
     }
 
     fun getDefaultImplsClass(interfaceClass: IrClass): IrClass =
         defaultImplsClasses.getOrPut(interfaceClass) {
+            val descriptor = WrappedClassDescriptor()
             IrClassImpl(
-                interfaceClass.startOffset, interfaceClass.endOffset, JvmLoweredDeclarationOrigin.DEFAULT_IMPLS,
-                createDefaultImplsClassDescriptor(interfaceClass.descriptor)
-            )
+                interfaceClass.startOffset, interfaceClass.endOffset,
+                JvmLoweredDeclarationOrigin.DEFAULT_IMPLS,
+                IrClassSymbolImpl(descriptor),
+                Name.identifier(JvmAbi.DEFAULT_IMPLS_CLASS_NAME),
+                ClassKind.CLASS,
+                Visibilities.PUBLIC,
+                Modality.FINAL,
+                isCompanion = false,
+                isInner = false,
+                isData = false,
+                isExternal = false,
+                isInline = false
+            ).apply {
+                descriptor.bind(this)
+                parent = interfaceClass
+            }
         }
-
-    companion object {
-
-        private fun createDefaultImplsClassDescriptor(interfaceDescriptor: ClassDescriptor): DefaultImplsClassDescriptorImpl {
-            return DefaultImplsClassDescriptorImpl(
-                Name.identifier(JvmAbi.DEFAULT_IMPLS_CLASS_NAME), interfaceDescriptor, interfaceDescriptor.source
-            )
-        }
-
-        private fun createDefaultImplFunDescriptor(
-            defaultImplsDescriptor: DefaultImplsClassDescriptor,
-            descriptor: FunctionDescriptor,
-            interfaceDescriptor: ClassDescriptor, typeMapper: KotlinTypeMapper
-        ): SimpleFunctionDescriptorImpl {
-            val name = Name.identifier(typeMapper.mapAsmMethod(descriptor).name)
-            return createStaticFunctionWithReceivers(defaultImplsDescriptor, name, descriptor, interfaceDescriptor.defaultType)
-        }
-    }
 }

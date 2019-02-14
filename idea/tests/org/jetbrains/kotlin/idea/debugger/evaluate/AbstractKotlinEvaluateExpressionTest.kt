@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate
@@ -447,39 +436,41 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDebuggerTestBase() {
     }
 
     private fun SuspendContextImpl.evaluate(item: TextWithImportsImpl, expectedResult: String?) {
-        runReadAction {
-            val sourcePosition = ContextUtil.getSourcePosition(this)
+        val sourcePosition = ContextUtil.getSourcePosition(this)
+        val contextElement = ContextUtil.getContextElement(debuggerContext)!!
 
-            val contextElement = ContextUtil.getContextElement(debuggerContext)!!
-            Assert.assertTrue("KotlinCodeFragmentFactory should be accepted for context element otherwise default evaluator will be called. ContextElement = ${contextElement.text}",
-                              KotlinCodeFragmentFactory().isContextAccepted(contextElement))
+        assert(KotlinCodeFragmentFactory().isContextAccepted(contextElement)) {
+            val text = runReadAction { contextElement.text }
+            "KotlinCodeFragmentFactory should be accepted for context element otherwise default evaluator will be called. " +
+                    "ContextElement = $text"
+        }
 
-            contextElement.putCopyableUserData(KotlinCodeFragmentFactory.DEBUG_CONTEXT_FOR_TESTS, this@AbstractKotlinEvaluateExpressionTest.debuggerContext)
+        contextElement.putCopyableUserData(
+            KotlinCodeFragmentFactory.DEBUG_CONTEXT_FOR_TESTS,
+            this@AbstractKotlinEvaluateExpressionTest.debuggerContext
+        )
 
+        runActionInSuspendCommand {
+            try {
+                val evaluator = runReadAction { EvaluatorBuilderImpl.build(item, contextElement, sourcePosition, project) }
+                    ?: throw AssertionError("Cannot create an Evaluator for Evaluate Expression")
 
-            runActionInSuspendCommand {
-                try {
-                    val evaluator = EvaluatorBuilderImpl.build(item, contextElement, sourcePosition, project)
-                                    ?: throw AssertionError("Cannot create an Evaluator for Evaluate Expression")
-
-                    val value = evaluator.evaluate(this@AbstractKotlinEvaluateExpressionTest.evaluationContext)
-                    val actualResult = value.asValue().asString()
-                    if (expectedResult != null) {
-                        Assert.assertEquals(
-                                "Evaluate expression returns wrong result for ${item.text}:\n" +
+                val value = evaluator.evaluate(this@AbstractKotlinEvaluateExpressionTest.evaluationContext)
+                val actualResult = value.asValue().asString()
+                if (expectedResult != null) {
+                    Assert.assertEquals(
+                        "Evaluate expression returns wrong result for ${item.text}:\n" +
                                 "expected = $expectedResult\n" +
                                 "actual   = $actualResult\n",
-                                expectedResult, actualResult)
-                    }
+                        expectedResult, actualResult)
                 }
-                catch (e: EvaluateException) {
-                    val expectedMessage = e.message?.replaceFirst(ID_PART_REGEX, "id=ID")
-                    Assert.assertEquals(
-                            "Evaluate expression throws wrong exception for ${item.text}:\n" +
+            } catch (e: EvaluateException) {
+                val expectedMessage = e.message?.replaceFirst(ID_PART_REGEX, "id=ID")
+                Assert.assertEquals(
+                    "Evaluate expression throws wrong exception for ${item.text}:\n" +
                             "expected = $expectedResult\n" +
                             "actual   = $expectedMessage\n",
-                            expectedResult, expectedMessage)
-                }
+                    expectedResult, expectedMessage)
             }
         }
     }

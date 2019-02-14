@@ -19,10 +19,13 @@ package org.jetbrains.kotlin.idea.scratch.compile
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.execution.process.ProcessOutput
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.compiler.ex.CompilerPathsEx
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.roots.OrderEnumerator
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.codegen.ClassBuilderFactories
@@ -51,45 +54,78 @@ import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import java.io.File
 
 class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
+    companion object {
+        private val TIMEOUT_MS = 30000
+    }
+
+    private var backgroundProcessIndicator: ProgressIndicator? = null
+
     override fun execute() {
-        val module = file.getModule() ?: return error("Module should be selected")
-        val psiFile = file.getPsiFile() as? KtFile ?: return error("Couldn't find KtFile for current editor")
+        handler.onStart(file)
 
-        if (!checkForErrors(psiFile)) {
-            return error("Compilation Error")
-        }
+        val module = file.getModule() ?: return errorOccurs("Module should be selected", isFatal = true)
+        val psiFile = file.getPsiFile() as? KtFile ?: return errorOccurs("Couldn't find KtFile for current editor", isFatal = true)
 
-        val result = KtScratchSourceFileProcessor().process(file)
+        if (!checkForErrors(psiFile)) return
+
+        val result = runReadAction { KtScratchSourceFileProcessor().process(file) }
         when (result) {
-            is KtScratchSourceFileProcessor.Result.Error -> return error(result.message)
+            is KtScratchSourceFileProcessor.Result.Error -> return errorOccurs(result.message, isFatal = true)
             is KtScratchSourceFileProcessor.Result.OK -> {
-                ApplicationManager.getApplication().invokeLater {
-                    LOG.printDebugMessage("After processing by KtScratchSourceFileProcessor:\n ${result.code}")
+                LOG.printDebugMessage("After processing by KtScratchSourceFileProcessor:\n ${result.code}")
 
-                    val modifiedScratchSourceFile =
-                        KtPsiFactory(psiFile.project).createFileWithLightClassSupport("tmp.kt", result.code, psiFile)
+                object : Task.Backgroundable(psiFile.project, "Running Kotlin Scratch...", true) {
+                    override fun run(indicator: ProgressIndicator) {
+                        backgroundProcessIndicator = indicator
 
-                    try {
-                        val tempDir = compileFileToTempDir(modifiedScratchSourceFile) ?: return@invokeLater
+                        val modifiedScratchSourceFile = runReadAction {
+                            KtPsiFactory(psiFile.project).createFileWithLightClassSupport("tmp.kt", result.code, psiFile)
+                        }
 
                         try {
-                            val commandLine = createCommandLine(module, result.mainClassName, tempDir.path)
+                            val tempDir = DumbService.getInstance(project).runReadActionInSmartMode(
+                                Computable {
+                                    compileFileToTempDir(modifiedScratchSourceFile)
+                                }
+                            ) ?: return
 
-                            LOG.printDebugMessage(commandLine.commandLineString)
+                            try {
+                                val commandLine = createCommandLine(module, result.mainClassName, tempDir.path)
 
-                            val handler = CapturingProcessHandler(commandLine)
-                            ProcessOutputParser().parse(handler.runProcess())
-                        } finally {
-                            tempDir.delete()
+                                LOG.printDebugMessage(commandLine.commandLineString)
+
+                                val processHandler = CapturingProcessHandler(commandLine)
+                                val executionResult = processHandler.runProcessWithProgressIndicator(indicator, TIMEOUT_MS)
+                                when {
+                                    executionResult.isTimeout -> {
+                                        errorOccurs("Couldn't get scratch execution result - stopped by timeout ($TIMEOUT_MS ms)")
+                                    }
+                                    executionResult.isCancelled -> {
+                                        // ignore
+                                    }
+                                    else -> {
+                                        ProcessOutputParser().parse(executionResult)
+                                    }
+                                }
+                            } finally {
+                                tempDir.delete()
+                                handler.onFinish(file)
+                            }
+                        } catch (e: Throwable) {
+                            LOG.printDebugMessage(result.code)
+                            errorOccurs(e.message ?: "Couldn't compile ${psiFile.name}", e, isFatal = true)
                         }
-                    } catch (e: Throwable) {
-                        LOG.info(result.code, e)
-                        handlers.forEach { it.error(file, e.message ?: "Couldn't compile ${psiFile.name}") }
-                    } finally {
-                        handlers.forEach { it.onFinish(file) }
                     }
-                }
+                }.queue()
             }
+        }
+    }
+
+    override fun stop() {
+        try {
+            backgroundProcessIndicator?.cancel()
+        } finally {
+            handler.onFinish(file)
         }
     }
 
@@ -159,14 +195,14 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
             try {
                 AnalyzingUtils.checkForSyntacticErrors(psiFile)
             } catch (e: IllegalArgumentException) {
-                handlers.forEach { it.error(file, e.message ?: "Couldn't compile ${psiFile.name}") }
+                errorOccurs(e.message ?: "Couldn't compile ${psiFile.name}", isFatal = true)
                 return@runReadAction false
             }
 
             val analysisResult = psiFile.analyzeWithAllCompilerChecks()
 
             if (analysisResult.isError()) {
-                handlers.forEach { it.error(file, analysisResult.error.message ?: "Couldn't compile ${psiFile.name}") }
+                errorOccurs(analysisResult.error.message ?: "Couldn't compile ${psiFile.name}", isFatal = true)
                 return@runReadAction false
             }
 
@@ -181,36 +217,32 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                             val scratchExpression = file.findExpression(diagnostic.psiElement)
                             if (scratchExpression == null) {
                                 LOG.error("Couldn't find expression to report error: ${diagnostic.psiElement.getElementTextWithContext()}")
-                                handlers.forEach { it.error(file, errorText) }
+                                handler.error(file, errorText)
 
                             } else {
-                                handlers.forEach { it.handle(file, scratchExpression, ScratchOutput(errorText, ScratchOutputType.ERROR)) }
+                                handler.handle(file, scratchExpression, ScratchOutput(errorText, ScratchOutputType.ERROR))
                             }
                         } else {
-                            handlers.forEach { it.error(file, errorText) }
+                            handler.error(file, errorText)
                         }
                     } else {
-                        handlers.forEach { it.error(file, errorText) }
+                        handler.error(file, errorText)
                     }
                 }
+                handler.onFinish(file)
                 return@runReadAction false
             }
             return@runReadAction true
         }
     }
 
-    private fun error(message: String) {
-        handlers.forEach { it.error(file, message) }
-        handlers.forEach { it.onFinish(file) }
-    }
-
     private fun ScratchFile.findExpression(psiElement: PsiElement): ScratchExpression? {
         val elementLine = psiElement.getLineNumber()
-        return getExpressions().firstOrNull { elementLine in it.lineStart..it.lineEnd }
+        return runReadAction { getExpressions().firstOrNull { elementLine in it.lineStart..it.lineEnd } }
     }
 
     private fun ScratchFile.findExpression(lineStart: Int, lineEnd: Int): ScratchExpression? {
-        return getExpressions().firstOrNull { it.lineStart == lineStart && it.lineEnd == lineEnd }
+        return runReadAction { getExpressions().firstOrNull { it.lineStart == lineStart && it.lineEnd == lineEnd } }
     }
 
     private inner class ProcessOutputParser {
@@ -218,7 +250,7 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
             val out = processOutput.stdout
             val err = processOutput.stderr
             if (err.isNotBlank()) {
-                handlers.forEach { it.error(file, err) }
+                handler.error(file, err)
             }
             if (out.isNotBlank()) {
                 parseStdOut(out)
@@ -239,7 +271,7 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                     val lineWoPrefix = line.removePrefix(KtScratchSourceFileProcessor.GENERATED_OUTPUT_PREFIX)
                     if (isResultEnd(lineWoPrefix)) {
                         val extractedLineInfo = extractLineInfoFrom(lineWoPrefix)
-                                ?: return error("Couldn't extract line info from line: $lineWoPrefix")
+                            ?: return errorOccurs("Couldn't extract line info from line: $lineWoPrefix", isFatal = true)
                         val (startLine, endLine) = extractedLineInfo
                         val scratchExpression = file.findExpression(startLine, endLine)
                         if (scratchExpression == null) {
@@ -249,15 +281,11 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                             )
                         } else {
                             userOutput.forEach { output ->
-                                handlers.forEach {
-                                    it.handle(file, scratchExpression, ScratchOutput(output, ScratchOutputType.OUTPUT))
-                                }
+                                handler.handle(file, scratchExpression, ScratchOutput(output, ScratchOutputType.OUTPUT))
                             }
 
                             results.forEach { result ->
-                                handlers.forEach {
-                                    it.handle(file, scratchExpression, ScratchOutput(result, ScratchOutputType.RESULT))
-                                }
+                                handler.handle(file, scratchExpression, ScratchOutput(result, ScratchOutputType.RESULT))
                             }
                         }
 

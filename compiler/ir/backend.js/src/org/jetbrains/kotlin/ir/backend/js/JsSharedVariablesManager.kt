@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.ir.backend.js
 
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassDescriptor
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedPropertyDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedVariableDescriptor
 import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
 import org.jetbrains.kotlin.backend.common.ir.SharedVariablesManager
@@ -33,6 +33,7 @@ import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
+import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.name.Name
 
 class JsSharedVariablesManager(val builtIns: IrBuiltIns, val implicitDeclarationsFile: IrFile) : SharedVariablesManager {
@@ -142,7 +143,7 @@ class JsSharedVariablesManager(val builtIns: IrBuiltIns, val implicitDeclaration
     }
 
     private fun createClosureBoxPropertyDeclaration(): IrField {
-        val descriptor = WrappedPropertyDescriptor()
+        val descriptor = WrappedFieldDescriptor()
         val symbol = IrFieldSymbolImpl(descriptor)
         val fieldName = Name.identifier("v")
         return IrFieldImpl(
@@ -169,7 +170,7 @@ class JsSharedVariablesManager(val builtIns: IrBuiltIns, val implicitDeclaration
 
         val declaration = IrConstructorImpl(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET, JsLoweredDeclarationOrigin.JS_CLOSURE_BOX_CLASS_DECLARATION, symbol,
-            Name.special("<init>"), Visibilities.PUBLIC, false, false, true
+            Name.special("<init>"), Visibilities.PUBLIC, closureBoxClassDeclaration.defaultType, false, false, true
         )
 
         descriptor.bind(declaration)

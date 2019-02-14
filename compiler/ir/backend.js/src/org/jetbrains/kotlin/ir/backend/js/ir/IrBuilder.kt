@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.ir.symbols.impl.IrTypeParameterSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.Variance
@@ -96,6 +97,8 @@ object JsIrBuilder {
 
     fun buildFunction(
         name: String,
+        returnType: IrType,
+        parent: IrDeclarationParent,
         visibility: Visibility = Visibilities.PUBLIC,
         modality: Modality = Modality.FINAL,
         isInline: Boolean = false,
@@ -103,10 +106,23 @@ object JsIrBuilder {
         isTailrec: Boolean = false,
         isSuspend: Boolean = false,
         origin: IrDeclarationOrigin = SYNTHESIZED_DECLARATION
-    ) = JsIrBuilder.buildFunction(Name.identifier(name), visibility, modality, isInline, isExternal, isTailrec, isSuspend, origin)
+    ) = JsIrBuilder.buildFunction(
+        Name.identifier(name),
+        returnType,
+        parent,
+        visibility,
+        modality,
+        isInline,
+        isExternal,
+        isTailrec,
+        isSuspend,
+        origin
+    )
 
     fun buildFunction(
         name: Name,
+        returnType: IrType,
+        parent: IrDeclarationParent,
         visibility: Visibility = Visibilities.PUBLIC,
         modality: Modality = Modality.FINAL,
         isInline: Boolean = false,
@@ -124,11 +140,15 @@ object JsIrBuilder {
             name,
             visibility,
             modality,
+            returnType,
             isInline,
             isExternal,
             isTailrec,
             isSuspend
-        ).also { descriptor.bind(it) }
+        ).also {
+            descriptor.bind(it)
+            it.parent = parent
+        }
     }
 
     fun buildGetObjectValue(type: IrType, classSymbol: IrClassSymbol) =
@@ -176,7 +196,7 @@ object JsIrBuilder {
 
     fun buildVar(
         type: IrType,
-        parent: IrDeclarationParent,
+        parent: IrDeclarationParent?,
         name: String = "tmp",
         isVar: Boolean = false,
         isConst: Boolean = false,
@@ -197,7 +217,7 @@ object JsIrBuilder {
         ).also {
             descriptor.bind(it)
             it.initializer = initializer
-            it.parent = parent
+            if (parent != null) it.parent = parent
         }
     }
 
@@ -233,6 +253,10 @@ object JsIrBuilder {
     fun buildTypeOperator(type: IrType, operator: IrTypeOperator, argument: IrExpression, toType: IrType, symbol: IrClassifierSymbol) =
         IrTypeOperatorCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, operator, toType, symbol, argument)
 
+    fun buildImplicitCast(value: IrExpression, toType: IrType) =
+        JsIrBuilder.buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType, toType.classifierOrFail)
+
+
     fun buildNull(type: IrType) = IrConstImpl.constNull(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type)
     fun buildBoolean(type: IrType, v: Boolean) = IrConstImpl.boolean(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, v)
     fun buildInt(type: IrType, v: Int) = IrConstImpl.int(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, v)
@@ -263,60 +287,5 @@ fun IrClass.simpleFunctions(): List<IrSimpleFunction> = this.declarations.flatMa
         is IrSimpleFunction -> listOf(it)
         is IrProperty -> listOfNotNull(it.getter, it.setter)
         else -> emptyList()
-    }
-}
-
-// TODO extract to common place?
-fun irCall(
-    call: IrCall,
-    newSymbol: IrFunctionSymbol,
-    dispatchReceiverAsFirstArgument: Boolean = false,
-    firstArgumentAsDispatchReceiver: Boolean = false
-): IrCall =
-    call.run {
-        IrCallImpl(
-            startOffset,
-            endOffset,
-            type,
-            newSymbol,
-            newSymbol.descriptor,
-            typeArgumentsCount,
-            origin
-        ).apply {
-            copyTypeAndValueArgumentsFrom(
-                call,
-                dispatchReceiverAsFirstArgument,
-                firstArgumentAsDispatchReceiver
-            )
-        }
-    }
-
-// TODO extract to common place?
-private fun IrCall.copyTypeAndValueArgumentsFrom(
-    call: IrCall,
-    dispatchReceiverAsFirstArgument: Boolean = false,
-    firstArgumentAsDispatchReceiver: Boolean = false
-) {
-    copyTypeArgumentsFrom(call)
-
-    var toValueArgumentIndex = 0
-    var fromValueArgumentIndex = 0
-
-    when {
-        dispatchReceiverAsFirstArgument -> {
-            putValueArgument(toValueArgumentIndex++, call.dispatchReceiver)
-        }
-        firstArgumentAsDispatchReceiver -> {
-            dispatchReceiver = call.getValueArgument(fromValueArgumentIndex++)
-        }
-        else -> {
-            dispatchReceiver = call.dispatchReceiver
-        }
-    }
-
-    extensionReceiver = call.extensionReceiver
-
-    while (fromValueArgumentIndex < call.valueArgumentsCount) {
-        putValueArgument(toValueArgumentIndex++, call.getValueArgument(fromValueArgumentIndex++))
     }
 }

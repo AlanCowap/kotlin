@@ -18,8 +18,8 @@ package org.jetbrains.kotlin.idea.refactoring.move.moveDeclarations.ui;
 
 import com.intellij.ide.util.DirectoryChooser;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.event.DocumentAdapter;
 import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
@@ -38,7 +38,6 @@ import com.intellij.refactoring.classMembers.MemberInfoChangeListener;
 import com.intellij.refactoring.move.MoveCallback;
 import com.intellij.refactoring.move.MoveHandler;
 import com.intellij.refactoring.move.moveClassesOrPackages.AutocreatingSingleSourceRootMoveDestination;
-import com.intellij.refactoring.move.moveClassesOrPackages.DestinationFolderComboBox;
 import com.intellij.refactoring.move.moveClassesOrPackages.MultipleRootsMoveDestination;
 import com.intellij.refactoring.ui.PackageNameReferenceEditorCombo;
 import com.intellij.refactoring.ui.RefactoringDialog;
@@ -63,6 +62,7 @@ import org.jetbrains.kotlin.idea.refactoring.memberInfo.KotlinMemberSelectionPan
 import org.jetbrains.kotlin.idea.refactoring.memberInfo.KotlinMemberSelectionTable;
 import org.jetbrains.kotlin.idea.refactoring.move.MoveUtilsKt;
 import org.jetbrains.kotlin.idea.refactoring.move.moveDeclarations.*;
+import org.jetbrains.kotlin.idea.refactoring.ui.KotlinDestinationFolderComboBox;
 import org.jetbrains.kotlin.idea.refactoring.ui.KotlinFileChooserDialog;
 import org.jetbrains.kotlin.idea.util.application.ApplicationUtilsKt;
 import org.jetbrains.kotlin.name.FqName;
@@ -75,10 +75,11 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 
 import static java.util.Collections.emptyList;
+import static org.jetbrains.kotlin.idea.refactoring.move.moveDeclarations.MoveKotlinDeclarationsProcessorKt.MoveSource;
 
 public class MoveKotlinTopLevelDeclarationsDialog extends RefactoringDialog {
     private static final String RECENTS_KEY = "MoveKotlinTopLevelDeclarationsDialog.RECENTS_KEY";
@@ -299,7 +300,7 @@ public class MoveKotlinTopLevelDeclarationsDialog extends RefactoringDialog {
             classPackageChooser.prependItem(targetPackageName);
         }
 
-        ((DestinationFolderComboBox) destinationFolderCB).setData(
+        ((KotlinDestinationFolderComboBox) destinationFolderCB).setData(
                 myProject,
                 targetDirectory,
                 new Pass<String>() {
@@ -405,7 +406,7 @@ public class MoveKotlinTopLevelDeclarationsDialog extends RefactoringDialog {
     private void createUIComponents() {
         classPackageChooser = createPackageChooser();
 
-        destinationFolderCB = new DestinationFolderComboBox() {
+        destinationFolderCB = new KotlinDestinationFolderComboBox() {
             @Override
             public String getTargetPackage() {
                 return MoveKotlinTopLevelDeclarationsDialog.this.getTargetPackage();
@@ -417,9 +418,9 @@ public class MoveKotlinTopLevelDeclarationsDialog extends RefactoringDialog {
         ReferenceEditorComboWithBrowseButton packageChooser =
                 new PackageNameReferenceEditorCombo("", myProject, RECENTS_KEY, RefactoringBundle.message("choose.destination.package"));
         Document document = packageChooser.getChildComponent().getDocument();
-        document.addDocumentListener(new DocumentAdapter() {
+        document.addDocumentListener(new DocumentListener() {
             @Override
-            public void documentChanged(DocumentEvent e) {
+            public void documentChanged(@NotNull DocumentEvent e) {
                 validateButtons();
             }
         });
@@ -774,12 +775,11 @@ public class MoveKotlinTopLevelDeclarationsDialog extends RefactoringDialog {
 
             MoveDeclarationsDescriptor options = new MoveDeclarationsDescriptor(
                     myProject,
-                    elementsToMove,
+                    MoveSource(elementsToMove),
                     target,
                     MoveDeclarationsDelegate.TopLevel.INSTANCE,
                     isSearchInComments(),
                     isSearchInNonJavaFiles(),
-                    false,
                     deleteSourceFile,
                     moveCallback,
                     false,

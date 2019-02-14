@@ -5,8 +5,8 @@
 
 package kotlin.script.experimental.jvmhost.test
 
-import kotlinx.coroutines.experimental.runBlocking
-import org.jetbrains.kotlin.daemon.common.toHexString
+import junit.framework.TestCase
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.*
@@ -15,6 +15,7 @@ import java.security.MessageDigest
 import kotlin.reflect.KClass
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.BasicScriptingHost
+import kotlin.script.experimental.host.FileScriptSource
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvmhost.*
@@ -22,15 +23,174 @@ import kotlin.script.experimental.jvmhost.impl.CompiledScriptClassLoader
 import kotlin.script.experimental.jvmhost.impl.KJvmCompiledScript
 import kotlin.script.templates.standard.SimpleScriptTemplate
 
-class ScriptingHostTest {
+class ScriptingHostTest : TestCase() {
+
+    companion object {
+        const val TEST_DATA_DIR = "libraries/scripting/jvm-host/testData"
+    }
 
     @Test
     fun testSimpleUsage() {
         val greeting = "Hello from script!"
         val output = captureOut {
-            evalScript("println(\"$greeting\")")
+            evalScript("println(\"$greeting\")").throwOnFailure()
         }
         Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testSimpleRequire() {
+        val greeting = "Hello from required!"
+        val script = "val subj = RequiredClass().value\nprintln(\"Hello from \$subj!\")"
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            importScripts(File(TEST_DATA_DIR, "importTest/requiredSrc.kt").toScriptSource())
+        }
+        val output = captureOut {
+            BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null).throwOnFailure()
+        }
+        Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testSimpleImport() {
+        val greeting = listOf("Hello from helloWithVal script!", "Hello from imported helloWithVal script!")
+        val script = "println(\"Hello from imported \$helloScriptName script!\")"
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            refineConfiguration {
+                beforeCompiling { ctx ->
+                    val importedScript = File(TEST_DATA_DIR, "importTest/helloWithVal.kts")
+                    if ((ctx.script as? FileScriptSource)?.file?.canonicalFile == importedScript.canonicalFile) {
+                        ctx.compilationConfiguration
+                    } else {
+                        ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                            importScripts(importedScript.toScriptSource())
+                        }
+                    }.asSuccess()
+                }
+            }
+        }
+        val output = captureOut {
+            BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null).throwOnFailure()
+        }.lines()
+        Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testDiamondImportWithoutSharing() {
+        val greeting = listOf("Hi from common", "Hi from middle", "Hi from common", "sharedVar == 3")
+        val output = doDiamondImportTest()
+        Assert.assertEquals(greeting, output)
+    }
+
+    @Test
+    fun testDiamondImportWithSharing() {
+        val greeting = listOf("Hi from common", "Hi from middle", "sharedVar == 5")
+        val output = doDiamondImportTest(
+            ScriptEvaluationConfiguration {
+                enableScriptsInstancesSharing()
+            }
+        )
+        Assert.assertEquals(greeting, output)
+    }
+
+    private fun doDiamondImportTest(evaluationConfiguration: ScriptEvaluationConfiguration? = null): List<String> {
+        val mainScript = "sharedVar += 1\nprintln(\"sharedVar == \$sharedVar\")".toScriptSource("main.kts")
+        val middleScript = File(TEST_DATA_DIR, "importTest/diamondImportMiddle.kts").toScriptSource()
+        val commonScript = File(TEST_DATA_DIR, "importTest/diamondImportCommon.kts").toScriptSource()
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            refineConfiguration {
+                beforeCompiling { ctx ->
+                    when (ctx.script.name) {
+                        "main.kts" -> ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                            importScripts(middleScript, commonScript)
+                        }
+                        "diamondImportMiddle.kts" -> ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                            importScripts(commonScript)
+                        }
+                        else -> ctx.compilationConfiguration
+                    }.asSuccess()
+                }
+            }
+        }
+        val output = captureOut {
+            BasicJvmScriptingHost().eval(mainScript, compilationConfiguration, evaluationConfiguration).throwOnFailure()
+        }.lines()
+        return output
+    }
+
+    @Test
+    fun testImportError() {
+        val script = "println(\"Hello from imported \$helloScriptName script!\")"
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            refineConfiguration {
+                beforeCompiling { ctx ->
+                    ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                        importScripts(File(TEST_DATA_DIR, "missing_script.kts").toScriptSource())
+                    }.asSuccess()
+                }
+            }
+        }
+        val res = BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null)
+        assertTrue(res is ResultWithDiagnostics.Failure)
+        val report = res.reports.find { it.message.startsWith("Source file or directory not found") }
+        assertNotNull(report)
+        assertEquals("/script.kts", report?.sourcePath)
+    }
+
+    @Test
+    fun testCompileOptionsLanguageVersion() {
+        val script = "typealias MyInt = Int\nval x: MyInt = 3"
+        val compilationConfiguration1 = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            compilerOptions("-language-version", "1.0")
+        }
+        val res = BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration1, null)
+        assertTrue(res is ResultWithDiagnostics.Failure)
+        res.reports.find { it.message.startsWith("The feature \"type aliases\" is only available since language version 1.1") }
+            ?: fail("Error report about language version not found. Reported:\n  ${res.reports.joinToString("\n  ") { it.message }}")
+    }
+
+    @Test
+    fun testCompileOptionsNoStdlib() {
+        val script = "println(\"Hi\")"
+
+        val res1 = evalScriptWithConfiguration(script) {
+            compilerOptions("-no-stdlib")
+        }
+        assertTrue(res1 is ResultWithDiagnostics.Failure)
+        res1.reports.find { it.message.startsWith("Unresolved reference: println") }
+            ?: fail("Expected unresolved reference report. Reported:\n  ${res1.reports.joinToString("\n  ") { it.message }}")
+
+        val res2 = evalScriptWithConfiguration(script) {
+            refineConfiguration {
+                beforeCompiling { ctx ->
+                    ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                        compilerOptions("-no-stdlib")
+                    }.asSuccess()
+                }
+            }
+        }
+        // -no-stdlib in refined configuration has no effect
+        assertTrue(res2 is ResultWithDiagnostics.Success)
+    }
+
+    @Test
+    fun testIgnoredOptionsWarning() {
+        val script = "println(\"Hi\")"
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            compilerOptions("-version", "-d", "destDir", "-Xreport-perf", "-no-reflect")
+            refineConfiguration {
+                beforeCompiling { ctx ->
+                    ScriptCompilationConfiguration(ctx.compilationConfiguration) {
+                        compilerOptions.append("-no-jdk", "-version", "-no-stdlib", "-Xdump-perf", "-no-inline")
+                    }.asSuccess()
+                }
+            }
+        }
+        val res = BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, null)
+        assertTrue(res is ResultWithDiagnostics.Success)
+        assertNotNull(res.reports.find { it.message == "The following compiler arguments are ignored on script compilation: -version, -d, -Xreport-perf" })
+        assertNotNull(res.reports.find { it.message == "The following compiler arguments are ignored on script compilation: -Xdump-perf" })
+        assertNotNull(res.reports.find { it.message == "The following compiler arguments are ignored when configured from refinement callbacks: -no-jdk, -no-stdlib" })
     }
 
     @Test
@@ -42,7 +202,7 @@ class ScriptingHostTest {
         val host = BasicJvmScriptingHost(compiler = compiler, evaluator = evaluator)
         Assert.assertTrue(cache.data.isEmpty())
 
-        val output = captureOut { evalScript(script, host) }
+        val output = captureOut { evalScript(script, host).throwOnFailure() }
         Assert.assertEquals("x = 1", output)
 
         Assert.assertEquals(1, cache.data.size)
@@ -52,7 +212,7 @@ class ScriptingHostTest {
         Assert.assertEquals(output, output2)
 
         // TODO: check if cached script is actually used
-        val output3 = captureOut { evalScript(script, host) }.trim()
+        val output3 = captureOut { evalScript(script, host).throwOnFailure() }.trim()
         Assert.assertEquals(output, output3)
     }
 
@@ -100,7 +260,7 @@ class ScriptingHostTest {
             Assert.assertEquals(output, output2)
 
             // TODO: check if cached script is actually used
-            val output3 = captureOut { evalScript(script, host) }.trim()
+            val output3 = captureOut { evalScript(script, host).throwOnFailure() }.trim()
             Assert.assertEquals(output, output3)
         } finally {
             cacheDir.deleteRecursively()
@@ -142,13 +302,24 @@ class ScriptingHostTest {
 
 fun ResultWithDiagnostics<*>.throwOnFailure(): ResultWithDiagnostics<*> = apply {
     if (this is ResultWithDiagnostics.Failure) {
-        throw Exception("Compilation/evaluation failed:\n  ${reports.joinToString("\n  ") { it.exception?.toString() ?: it.message }}")
+        val firstExceptionFromReports = reports.find { it.exception != null }?.exception
+        throw Exception(
+            "Compilation/evaluation failed:\n  ${reports.joinToString("\n  ") { it.exception?.toString() ?: it.message }}",
+            firstExceptionFromReports
+        )
     }
 }
 
-private fun evalScript(script: String, host: BasicScriptingHost = BasicJvmScriptingHost()) {
-    val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate>()
-    host.eval(script.toScriptSource(), compilationConfiguration, null).throwOnFailure()
+private fun evalScript(script: String, host: BasicScriptingHost = BasicJvmScriptingHost()): ResultWithDiagnostics<*> =
+    evalScriptWithConfiguration(script, host)
+
+private fun evalScriptWithConfiguration(
+    script: String,
+    host: BasicScriptingHost = BasicJvmScriptingHost(),
+    body: ScriptCompilationConfiguration.Builder.() -> Unit = {}
+): ResultWithDiagnostics<EvaluationResult> {
+    val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate>(body = body)
+    return host.eval(script.toScriptSource(), compilationConfiguration, null)
 }
 
 
@@ -177,6 +348,8 @@ private fun File.readCompiledScript(scriptCompilationConfiguration: ScriptCompil
         }
     }
 }
+
+private fun ByteArray.toHexString(): String = joinToString("", transform = { "%02x".format(it) })
 
 
 private class FileBasedScriptCache(val baseDir: File) : CompiledJvmScriptsCache {

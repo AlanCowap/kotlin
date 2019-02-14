@@ -5,11 +5,11 @@
 
 package org.jetbrains.kotlin.codegen
 
-import org.jetbrains.kotlin.backend.common.isTopLevelInPackage
 import org.jetbrains.kotlin.codegen.coroutines.createCustomCopy
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.config.JVMAssertionsMode
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.descriptors.isTopLevelInPackage
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingTraceContext
 import org.jetbrains.kotlin.resolve.DelegatingBindingTrace
@@ -53,7 +53,7 @@ fun createMethodNodeForAlwaysEnabledAssert(
 
     val node =
         org.jetbrains.org.objectweb.asm.tree.MethodNode(
-            Opcodes.ASM5,
+            Opcodes.API_VERSION,
             Opcodes.ACC_STATIC,
             "fake",
             typeMapper.mapAsmMethod(functionDescriptor).descriptor, null, null

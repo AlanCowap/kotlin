@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.codegen.inline
 import com.intellij.psi.PsiElement
 import com.intellij.util.ArrayUtil
 import org.jetbrains.kotlin.backend.common.isBuiltInIntercepted
-import org.jetbrains.kotlin.backend.common.isTopLevelInPackage
 import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.AsmUtil.getMethodAsmFlags
@@ -20,15 +19,14 @@ import org.jetbrains.kotlin.codegen.coroutines.createMethodNodeForSuspendCorouti
 import org.jetbrains.kotlin.codegen.coroutines.isBuiltInSuspendCoroutineUninterceptedOrReturnInJvm
 import org.jetbrains.kotlin.codegen.intrinsics.bytecode
 import org.jetbrains.kotlin.codegen.intrinsics.classId
-import org.jetbrains.kotlin.codegen.optimization.common.ControlFlowGraph
-import org.jetbrains.kotlin.codegen.optimization.common.asSequence
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.config.isReleaseCoroutines
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.isInlineOnly
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
+import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -38,6 +36,7 @@ import org.jetbrains.kotlin.resolve.calls.checkers.isBuiltInCoroutineContext
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import org.jetbrains.kotlin.resolve.inline.InlineUtil.isInlinableParameterExpression
+import org.jetbrains.kotlin.resolve.inline.isInlineOnly
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodGenericSignature
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterKind
@@ -225,10 +224,10 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             val originalSuspendLambdaDescriptor =
                 parentContext.originalSuspendLambdaDescriptor ?: error("No original lambda descriptor found")
             codegen.genCoroutineInstanceForSuspendLambda(originalSuspendLambdaDescriptor)
-                    ?: error("No stack value for coroutine instance of lambda found")
+                ?: error("No stack value for coroutine instance of lambda found")
         } else
             codegen.getContinuationParameterFromEnclosingSuspendFunctionDescriptor(codegen.context.functionDescriptor)
-                    ?: error("No stack value for continuation parameter of suspend function")
+                ?: error("No stack value for continuation parameter of suspend function")
     }
 
     protected fun inlineCall(nodeAndSmap: SMAPAndMethodNode, callDefault: Boolean): InlineResult {
@@ -247,18 +246,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             }
         }
         val reificationResult = reifiedTypeInliner.reifyInstructions(node)
-
-        val hasMonitor = node.instructions.asSequence().any { it.opcode == Opcodes.MONITORENTER }
-        if (hasMonitor) {
-            state.globalCoroutinesContext.pushArgumentIndexes(findInlineLambdasInsideMonitor(node))
-        }
-        try {
-            generateClosuresBodies()
-        } finally {
-            if (hasMonitor) {
-                state.globalCoroutinesContext.popArgumentIndexes()
-            }
-        }
+        generateClosuresBodies()
 
         //through generation captured parameters will be added to invocationParamBuilder
         putClosureParametersOnStack()
@@ -299,7 +287,6 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         sourceCompiler.generateAndInsertFinallyBlocks(
             adapter, infos, (remapper.remap(parameters.argsSizeOnStack + 1).value as StackValue.Local).index
         )
-        removeStaticInitializationTrigger(adapter)
         if (!sourceCompiler.isFinallyMarkerRequired()) {
             removeFinallyMarkers(adapter)
         }
@@ -315,45 +302,6 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         return result
     }
 
-    private fun findInlineLambdasInsideMonitor(node: MethodNode): Set<Int> {
-        val sources = MethodInliner.analyzeMethodNodeBeforeInline(node)
-
-        val cfg = ControlFlowGraph.build(node)
-        val monitorDepthMap = hashMapOf<AbstractInsnNode, Int>()
-        val result = hashSetOf<Int>()
-
-        fun addMonitorDepthToSuccs(index: Int, depth: Int) {
-            val insn = node.instructions[index]
-            monitorDepthMap[insn] = depth
-            val newDepth = when (insn.opcode) {
-                Opcodes.MONITORENTER -> depth + 1
-                Opcodes.MONITOREXIT -> depth - 1
-                else -> depth
-            }
-            for (succIndex in cfg.getSuccessorsIndices(index)) {
-                if (monitorDepthMap[node.instructions[succIndex]] == null) {
-                    addMonitorDepthToSuccs(succIndex, newDepth)
-                }
-            }
-        }
-
-        addMonitorDepthToSuccs(0, 0)
-
-        for (insn in node.instructions.asSequence()) {
-            if (insn !is MethodInsnNode) continue
-            if (!isInvokeOnLambda(insn.owner, insn.name)) continue
-            if (monitorDepthMap[insn]?.let { it > 0 } != true) continue
-            val frame = sources[node.instructions.indexOf(insn)] ?: continue
-            for (source in frame.getStack(frame.stackSize - Type.getArgumentTypes(insn.desc).size - 1).insns) {
-                if (source.opcode == Opcodes.ALOAD) {
-                    result.add((source as VarInsnNode).`var`)
-                }
-            }
-        }
-
-        return result
-    }
-
     private fun isInlinedToInlineFunInKotlinRuntime(): Boolean {
         val codegen = this.codegen as? ExpressionCodegen ?: return false
         val caller = codegen.context.functionDescriptor
@@ -363,16 +311,8 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
     }
 
     private fun generateClosuresBodies() {
-        val parameters = invocationParamBuilder.buildParameters()
-
         for (info in expressionMap.values) {
-            val index = parameters.find { it.lambda == info }?.index
-            state.globalCoroutinesContext.enterMonitorIfNeeded(index)
-            try {
-                info.generateLambdaBody(sourceCompiler, reifiedTypeInliner)
-            } finally {
-                state.globalCoroutinesContext.exitMonitorIfNeeded(index)
-            }
+            info.generateLambdaBody(sourceCompiler, reifiedTypeInliner)
         }
     }
 
@@ -573,10 +513,10 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
             val resultInCache = state.inlineCache.methodNodeById.getOrPut(methodId) {
                 val result = doCreateMethodNodeFromCompiled(directMember, state, asmMethod)
-                        ?: if (functionDescriptor.isSuspend)
-                            doCreateMethodNodeFromCompiled(directMember, state, jvmSignature.asmMethod)
-                        else
-                            null
+                    ?: if (functionDescriptor.isSuspend)
+                        doCreateMethodNodeFromCompiled(directMember, state, jvmSignature.asmMethod)
+                    else
+                        null
                 result ?: throw IllegalStateException("Couldn't obtain compiled function body for $functionDescriptor")
             }
 
@@ -601,7 +541,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         private fun cloneMethodNode(methodNode: MethodNode): MethodNode {
             methodNode.instructions.resetLabels()
             return MethodNode(
-                API, methodNode.access, methodNode.name, methodNode.desc, methodNode.signature,
+                Opcodes.API_VERSION, methodNode.access, methodNode.name, methodNode.desc, methodNode.signature,
                 ArrayUtil.toStringArray(methodNode.exceptions)
             ).also(methodNode::accept)
         }
@@ -626,7 +566,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
             val bytes = state.inlineCache.classBytes.getOrPut(containerId) {
                 findVirtualFile(state, containerId)?.contentsToByteArray()
-                        ?: throw IllegalStateException("Couldn't find declaration file for " + containerId)
+                    ?: throw IllegalStateException("Couldn't find declaration file for " + containerId)
             }
 
             val methodNode =
@@ -646,21 +586,6 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             val name = callableDescriptor.name.asString()
             return (name == "arrayOf" || name == "emptyArray") && callableDescriptor.containingDeclaration is BuiltInsPackageFragment
         }
-
-        private fun removeStaticInitializationTrigger(methodNode: MethodNode) {
-            val insnList = methodNode.instructions
-            var insn: AbstractInsnNode? = insnList.first
-            while (insn != null) {
-                if (MultifileClassPartCodegen.isStaticInitTrigger(insn)) {
-                    val clinitTriggerCall = insn
-                    insn = insn.next
-                    insnList.remove(clinitTriggerCall)
-                } else {
-                    insn = insn.next
-                }
-            }
-        }
-
 
         /*descriptor is null for captured vars*/
         private fun shouldPutGeneralValue(type: Type, kotlinType: KotlinType?, stackValue: StackValue): Boolean {
@@ -796,30 +721,37 @@ class PsiInlineCodegen(
     }
 
     override fun genValueAndPut(
-        valueParameterDescriptor: ValueParameterDescriptor,
+        valueParameterDescriptor: ValueParameterDescriptor?,
         argumentExpression: KtExpression,
-        parameterType: Type,
+        parameterType: JvmKotlinType,
         parameterIndex: Int
     ) {
+        requireNotNull(valueParameterDescriptor) {
+            "Parameter descriptor can only be null in case a @PolymorphicSignature function is called, " +
+                    "which cannot be declared in Kotlin and thus be inline: $codegen"
+        }
+
         if (isInliningParameter(argumentExpression, valueParameterDescriptor)) {
-            val lambdaInfo = rememberClosure(argumentExpression, parameterType, valueParameterDescriptor)
+            val lambdaInfo = rememberClosure(argumentExpression, parameterType.type, valueParameterDescriptor)
 
             val receiverValue = getBoundCallableReferenceReceiver(argumentExpression)
             if (receiverValue != null) {
                 val receiver = codegen.generateReceiverValue(receiverValue, false)
+                val receiverKotlinType = receiver.kotlinType
+                val boxedReceiver =
+                    if (receiverKotlinType != null)
+                        receiver.type.boxReceiverForBoundReference(receiverKotlinType, state)
+                    else
+                        receiver.type.boxReceiverForBoundReference()
+
                 putClosureParametersOnStack(
                     lambdaInfo,
-                    StackValue.coercion(receiver, receiver.type.boxReceiverForBoundReference(), null)
+                    StackValue.coercion(receiver, boxedReceiver, receiverKotlinType)
                 )
             }
         } else {
             val value = codegen.gen(argumentExpression)
-            putValueIfNeeded(
-                JvmKotlinType(parameterType, valueParameterDescriptor.original.type),
-                value,
-                ValueKind.GENERAL,
-                valueParameterDescriptor.index
-            )
+            putValueIfNeeded(parameterType, value, ValueKind.GENERAL, parameterIndex)
         }
     }
 

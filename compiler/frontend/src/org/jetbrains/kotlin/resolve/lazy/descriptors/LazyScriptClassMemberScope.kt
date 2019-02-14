@@ -41,10 +41,13 @@ class LazyScriptClassMemberScope(
         if (baseConstructorDescriptor != null) {
             val implicitReceiversParamTypes =
                 scriptDescriptor.implicitReceivers.mapIndexed { idx, receiver ->
-                    "$IMPLICIT_RECEIVER_PARAM_NAME_PREFIX$idx" to receiver.defaultType
+                    val name =
+                        if (receiver is ScriptDescriptor) "$IMPORTED_SCRIPT_PARAM_NAME_PREFIX${receiver.name}"
+                        else "$IMPLICIT_RECEIVER_PARAM_NAME_PREFIX$idx"
+                    name to receiver.defaultType
                 }
-            val environmentVarsParamTypes =
-                scriptDescriptor.scriptEnvironmentProperties.map {
+            val providedPropertiesParamTypes =
+                scriptDescriptor.scriptProvidedProperties.map {
                     it.name.identifier to it.type
                 }
             val annotations = baseConstructorDescriptor.annotations
@@ -53,9 +56,8 @@ class LazyScriptClassMemberScope(
             )
             var paramsIndexBase = baseConstructorDescriptor.valueParameters.lastIndex + 1
             val syntheticParameters =
-                (implicitReceiversParamTypes + environmentVarsParamTypes).mapNotNull { param: Pair<String, KotlinType> ->
-                    if (param == null) null
-                    else ValueParameterDescriptorImpl(
+                (implicitReceiversParamTypes + providedPropertiesParamTypes).map { param: Pair<String, KotlinType> ->
+                    ValueParameterDescriptorImpl(
                         constructorDescriptor,
                         null,
                         paramsIndexBase++,
@@ -90,11 +92,21 @@ class LazyScriptClassMemberScope(
         return constructor
     }
 
+    override fun getNonDeclaredProperties(name: Name, result: MutableSet<PropertyDescriptor>) {
+        super.getNonDeclaredProperties(name, result)
+        if (scriptDescriptor.resultFieldName() == name.asString()) {
+            scriptDescriptor.resultValue?.let {
+                result.add(it)
+            }
+        }
+    }
+
     override fun createPropertiesFromPrimaryConstructorParameters(name: Name, result: MutableSet<PropertyDescriptor>) {
     }
 
     companion object {
         const val IMPLICIT_RECEIVER_PARAM_NAME_PREFIX = "\$\$implicitReceiver"
+        const val IMPORTED_SCRIPT_PARAM_NAME_PREFIX = "\$\$importedScript"
     }
 }
 

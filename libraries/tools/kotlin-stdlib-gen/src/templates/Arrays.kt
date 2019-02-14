@@ -1,11 +1,13 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
 package templates
 
 import templates.Family.*
+import templates.Ordering.stableSortNote
+import templates.Ordering.appendStableSortNote
 
 object ArrayOps : TemplateGroupBase() {
 
@@ -77,14 +79,42 @@ object ArrayOps : TemplateGroupBase() {
             body { "return storage.contentEquals(other.storage)" }
             return@builder
         }
+        doc {
+            doc + """
+            The elements are compared for equality with the [equals][Any.equals] function.
+            For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
+            """
+        }
         on(Platform.JVM) {
             inlineOnly()
             body { "return java.util.Arrays.equals(this, other)" }
         }
 
         on(Platform.JS) {
-            annotation("""@library("arrayEquals")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayEquals")""")
+                body { "definedExternally" }
+            }
+
+            on(Backend.IR) {
+                body { "return contentEqualsInternal(other)" }
+            }
+        }
+        on(Platform.Native) {
+            fun notEq(operand1: String, operand2: String) = when {
+                primitive?.isFloatingPoint() == true -> "!$operand1.equals($operand2)"
+                else -> "$operand1 != $operand2"
+            }
+            body {
+                """
+                if (this === other) return true
+                if (size != other.size) return false
+                for (i in indices) {
+                    if (${notEq("this[i]", "other[i]")}) return false
+                }
+                return true
+                """
+            }
         }
     }
 
@@ -100,6 +130,9 @@ object ArrayOps : TemplateGroupBase() {
 
             If two corresponding elements are nested arrays, they are also compared deeply.
             If any of arrays contains itself on any nesting level the behavior is undefined.
+
+            The elements of other types are compared for equality with the [equals][Any.equals] function.
+            For floating point numbers it means that `NaN` is equal to itself and `-0.0` is not equal to `0.0`.
             """
         }
         returns("Boolean")
@@ -116,8 +149,17 @@ object ArrayOps : TemplateGroupBase() {
             }
         }
         on(Platform.JS) {
-            annotation("""@library("arrayDeepEquals")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayDeepEquals")""")
+                body { "definedExternally" }
+            }
+
+            on(Backend.IR) {
+                body { "return contentDeepEqualsImpl(other)" }
+            }
+        }
+        on(Platform.Native) {
+            body { "return contentDeepEqualsImpl(other)" }
         }
     }
 
@@ -141,8 +183,16 @@ object ArrayOps : TemplateGroupBase() {
             body { "return java.util.Arrays.toString(this)" }
         }
         on(Platform.JS) {
-            annotation("""@library("arrayToString")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayToString")""")
+                body { "definedExternally" }
+            }
+            on(Backend.IR) {
+                body { "return arrayToString(this as Array<*>)" }
+            }
+        }
+        on(Platform.Native) {
+            body { """return joinToString(", ", "[", "]")""" }
         }
     }
 
@@ -174,8 +224,16 @@ object ArrayOps : TemplateGroupBase() {
             }
         }
         on(Platform.JS) {
-            annotation("""@library("arrayDeepToString")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayDeepToString")""")
+                body { "definedExternally" }
+            }
+            on(Backend.IR) {
+                body { "return contentDeepToStringImpl()" }
+            }
+        }
+        on(Platform.Native) {
+            body { "return contentDeepToStringImpl()" }
         }
     }
 
@@ -196,8 +254,23 @@ object ArrayOps : TemplateGroupBase() {
             body { "return java.util.Arrays.hashCode(this)" }
         }
         on(Platform.JS) {
-            annotation("""@library("arrayHashCode")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayHashCode")""")
+                body { "definedExternally" }
+            }
+            on(Backend.IR) {
+                body { "return contentHashCodeInternal()" }
+            }
+        }
+        on(Platform.Native) {
+            body {
+                """
+                var result = 1
+                for (element in this)
+                    result = 31 * result + element.hashCode()
+                return result
+                """
+            }
         }
     }
 
@@ -227,8 +300,16 @@ object ArrayOps : TemplateGroupBase() {
             }
         }
         on(Platform.JS) {
-            annotation("""@library("arrayDeepHashCode")""")
-            body { "definedExternally" }
+            on(Backend.Legacy) {
+                annotation("""@library("arrayDeepHashCode")""")
+                body { "definedExternally" }
+            }
+            on(Backend.IR) {
+                body { "return contentDeepHashCodeInternal()" }
+            }
+        }
+        on(Platform.Native) {
+            body { "return contentDeepHashCodeImpl()" }
         }
     }
 
@@ -350,6 +431,10 @@ object ArrayOps : TemplateGroupBase() {
             inlineOnly()
             body { "return plus(element)" }
         }
+        on(Platform.Native) {
+            inlineOnly()
+            body { "return plus(element)" }
+        }
         on(Platform.JS) {
             family = ArraysOfObjects
             inline(suppressWarning = true)
@@ -401,6 +486,16 @@ object ArrayOps : TemplateGroupBase() {
                     "return plus(${primitive.name.toLowerCase()}ArrayOf(element))"
             }
         }
+        on(Platform.Native) {
+            body {
+                """
+                val index = size
+                val result = copyOfUninitializedElements(index + 1)
+                result[index] = element
+                return result
+                """
+            }
+        }
         on(Platform.Common) {
             specialFor(InvariantArraysOfObjects) {
                 suppress("NO_ACTUAL_FOR_EXPECT") // TODO: KT-21937
@@ -437,8 +532,36 @@ object ArrayOps : TemplateGroupBase() {
             when (primitive) {
                 null, PrimitiveType.Boolean, PrimitiveType.Long ->
                     body { "return arrayPlusCollection(this, elements)" }
-                else ->
-                    body { "return fillFromCollection(this.copyOf(size + elements.size), this.size, elements)" }
+                else -> {
+                    on(Backend.Legacy) {
+                        body {
+                            "return fillFromCollection(this.copyOf(size + elements.size), this.size, elements)"
+                        }
+                    }
+                    on(Backend.IR) {
+                        // Don't use fillFromCollection because it treats arrays
+                        // as `dynamic` but we need to concrete types to perform
+                        // unboxing of collections elements
+                        body {
+                            """
+                            var index = size
+                            val result = this.copyOf(size + elements.size)
+                            for (element in elements) result[index++] = element
+                            return result
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        on(Platform.Native) {
+            body {
+                """
+                var index = size
+                val result = copyOfUninitializedElements(index + elements.size)
+                for (element in elements) result[index++] = element
+                return result
+                """
             }
         }
         on(Platform.Common) {
@@ -482,6 +605,17 @@ object ArrayOps : TemplateGroupBase() {
                 body { """return primitiveArrayConcat(this, elements)""" }
             }
         }
+        on(Platform.Native) {
+            body {
+                """
+                val thisSize = size
+                val arraySize = elements.size
+                val result = copyOfUninitializedElements(thisSize + arraySize)
+                elements.copyRangeTo(result, 0, arraySize, thisSize)
+                return result
+                """
+            }
+        }
         on(Platform.Common) {
             specialFor(InvariantArraysOfObjects) {
                 suppress("NO_ACTUAL_FOR_EXPECT") // TODO: KT-21937
@@ -507,7 +641,7 @@ object ArrayOps : TemplateGroupBase() {
             @param endIndex the end (exclusive) of the subrange to copy, size of this array by default.
 
             @throws IndexOutOfBoundsException or [IllegalArgumentException] when [startIndex] or [endIndex] is out of range of this array indices or when `startIndex > endIndex`.
-            @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationIndex],
+            @throws IndexOutOfBoundsException when the subrange doesn't fit into the [destination] array starting at the specified [destinationOffset],
             or when that index is out of the [destination] array indices range.
 
             @return the [destination] array.
@@ -517,7 +651,10 @@ object ArrayOps : TemplateGroupBase() {
         specialFor(ArraysOfUnsigned) {
             inlineOnly()
             body {
-                "return SELF(storage.copyInto(destination.storage, destinationOffset, startIndex, endIndex))"
+                """
+                storage.copyInto(destination.storage, destinationOffset, startIndex, endIndex)
+                return destination
+                """
             }
         }
         specialFor(ArraysOfPrimitives, InvariantArraysOfObjects) {
@@ -542,6 +679,15 @@ object ArrayOps : TemplateGroupBase() {
                     val cast = ".unsafeCast<Array<$primitive>>()".takeIf { family == ArraysOfPrimitives } ?: ""
                     """
                     arrayCopy(this$cast, destination$cast, destinationOffset, startIndex, endIndex)
+                    return destination
+                    """
+                }
+            }
+            on(Platform.Native) {
+                suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+                body {
+                    """
+                    this.copyRangeTo(destination, startIndex, endIndex, destinationOffset)
                     return destination
                     """
                 }
@@ -619,6 +765,15 @@ object ArrayOps : TemplateGroupBase() {
                     suppress("NO_ACTUAL_FOR_EXPECT") // TODO: KT-21937
                 }
             }
+            on(Platform.Native) {
+                inlineOnly()
+                body {
+                    """
+                    checkCopyOfRangeArguments(fromIndex, toIndex, size)
+                    return copyOfUninitializedElements(fromIndex, toIndex)
+                    """
+                }
+            }
         }
     }
 
@@ -664,7 +819,10 @@ object ArrayOps : TemplateGroupBase() {
                     suppress("NO_ACTUAL_FOR_EXPECT") // TODO: KT-21937
                 }
             }
-
+            on(Platform.Native) {
+                inlineOnly()
+                body { "return this.copyOfUninitializedElements(size)" }
+            }
         }
     }
 
@@ -704,7 +862,10 @@ object ArrayOps : TemplateGroupBase() {
                 }
                 body { newSizeCheck + "\n" + body }
             }
-
+            on(Platform.Native) {
+                inlineOnly()
+                body { "return this.copyOfUninitializedElements(newSize)" }
+            }
         }
         specialFor(InvariantArraysOfObjects) {
             sample("samples.collections.Arrays.CopyOfOperations.resizingCopyOf")
@@ -721,6 +882,10 @@ object ArrayOps : TemplateGroupBase() {
             }
             on(Platform.Common) {
                 suppress("NO_ACTUAL_FOR_EXPECT") // TODO: KT-21937
+            }
+            on(Platform.Native) {
+                inlineOnly()
+                body { "return this.copyOfNulls(newSize)" }
             }
         }
         specialFor(ArraysOfPrimitives, InvariantArraysOfObjects) {
@@ -739,6 +904,7 @@ object ArrayOps : TemplateGroupBase() {
     } builder {
         typeParam("T : Comparable<T>")
         doc { "Sorts the array in-place according to the natural order of its elements." }
+        appendStableSortNote()
         specialFor(ArraysOfPrimitives) {
             doc { "Sorts the array in-place." }
         }
@@ -746,15 +912,21 @@ object ArrayOps : TemplateGroupBase() {
         returns("Unit")
         on(Platform.JS) {
             body {
-                """
-                if (size > 1)
-                    sort { a: T, b: T -> a.compareTo(b) }
-                """
+                """if (size > 1) sortArray(this)"""
             }
             specialFor(ArraysOfPrimitives) {
                 if (primitive != PrimitiveType.Long) {
-                    annotation("""@library("primitiveArraySort")""")
-                    body { "definedExternally" }
+                    on(Backend.Legacy) {
+                        annotation("""@library("primitiveArraySort")""")
+                        body { "definedExternally" }
+                    }
+                    on(Backend.IR) {
+                        body { "this.asDynamic().sort()" }
+                    }
+                } else {
+                    body {
+                        """if (size > 1) sort { a: T, b: T -> a.compareTo(b) }"""
+                    }
                 }
             }
         }
@@ -774,12 +946,21 @@ object ArrayOps : TemplateGroupBase() {
                 }
             }
         }
+        on(Platform.Native) {
+            specialFor(ArraysOfObjects) {
+                body { """if (size > 1) kotlin.util.sortArrayComparable(this)""" }
+            }
+            specialFor(ArraysOfPrimitives) {
+                body { """if (size > 1) kotlin.util.sortArray(this)""" }
+            }
+        }
     }
 
     val f_sortWith = fn("sortWith(comparator: Comparator<in T>)") {
         include(ArraysOfObjects)
     } builder {
         doc { "Sorts the array in-place according to the order specified by the given [comparator]." }
+        appendStableSortNote()
         returns("Unit")
         on(Platform.JVM) {
             body {
@@ -788,23 +969,30 @@ object ArrayOps : TemplateGroupBase() {
         }
         on(Platform.JS) {
             body {
-                """
-                if (size > 1)
-                    sort { a, b -> comparator.compare(a, b) }
-                """
+                """if (size > 1) sortArrayWith(this, comparator)"""
             }
+        }
+        on(Platform.Native) {
+            body { """if (size > 1) kotlin.util.sortArrayWith(this, 0, size, comparator)""" }
         }
     }
 
-    val f_sort_comparison = fn("sort(noinline comparison: (a: T, b: T) -> Int)") {
+    val f_sort_comparison = fn("sort(comparison: (a: T, b: T) -> Int)") {
         platforms(Platform.JS)
         include(ArraysOfObjects, ArraysOfPrimitives)
         exclude(PrimitiveType.Boolean)
     } builder {
-        inlineOnly()
         returns("Unit")
         doc { "Sorts the array in-place according to the order specified by the given [comparison] function." }
-        body { "asDynamic().sort(comparison)" }
+        specialFor(ArraysOfPrimitives) {
+            inlineOnly()
+            signature("sort(noinline comparison: (a: T, b: T) -> Int)")
+            body { "asDynamic().sort(comparison)" }
+        }
+        specialFor(ArraysOfObjects) {
+            appendStableSortNote()
+            body { """if (size > 1) sortArrayWith(this, comparison)""" }
+        }
     }
 
     val f_sort_objects = fn("sort()") {
@@ -815,6 +1003,8 @@ object ArrayOps : TemplateGroupBase() {
         doc {
             """
             Sorts the array in-place according to the natural order of its elements.
+
+            $stableSortNote
 
             @throws ClassCastException if any element of the array is not [Comparable].
             """
@@ -831,6 +1021,9 @@ object ArrayOps : TemplateGroupBase() {
         exclude(PrimitiveType.Boolean)
     } builder {
         doc { "Sorts a range in the array in-place." }
+        specialFor(ArraysOfObjects) {
+            appendStableSortNote()
+        }
         returns("Unit")
         body {
             "java.util.Arrays.sort(this, fromIndex, toIndex)"
@@ -842,6 +1035,7 @@ object ArrayOps : TemplateGroupBase() {
         include(ArraysOfObjects)
     } builder {
         doc { "Sorts a range in the array in-place with the given [comparator]." }
+        appendStableSortNote()
         returns("Unit")
         body {
             "java.util.Arrays.sort(this, fromIndex, toIndex, comparator)"
@@ -862,8 +1056,7 @@ object ArrayOps : TemplateGroupBase() {
             body { """return ArrayList<T>(this.unsafeCast<Array<Any?>>())""" }
         }
 
-        specialFor(ArraysOfPrimitives) {
-            val objectLiteralImpl = """
+        val objectLiteralImpl = """
                         return object : AbstractList<T>(), RandomAccess {
                             override val size: Int get() = this@asList.size
                             override fun isEmpty(): Boolean = this@asList.isEmpty()
@@ -873,6 +1066,7 @@ object ArrayOps : TemplateGroupBase() {
                             override fun lastIndexOf(element: T): Int = this@asList.lastIndexOf(element)
                         }
                         """
+        specialFor(ArraysOfPrimitives) {
             on(Platform.JVM) {
                 body { objectLiteralImpl }
             }
@@ -885,6 +1079,9 @@ object ArrayOps : TemplateGroupBase() {
                     body { "return this.unsafeCast<Array<T>>().asList()" }
                 }
             }
+        }
+        on(Platform.Native) {
+            body { objectLiteralImpl }
         }
     }
 
@@ -913,8 +1110,6 @@ object ArrayOps : TemplateGroupBase() {
             on(Platform.JS) {
                 when (primitive) {
                     PrimitiveType.Char -> {}
-                    PrimitiveType.Boolean, PrimitiveType.Long ->
-                        body { "return copyOf().unsafeCast<Array<T>>()" }
                     else ->
                         body { "return js(\"[]\").slice.call(this)" }
                 }

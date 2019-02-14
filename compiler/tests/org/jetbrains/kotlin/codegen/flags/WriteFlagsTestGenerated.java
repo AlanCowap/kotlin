@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -703,6 +703,80 @@ public class WriteFlagsTestGenerated extends AbstractWriteFlagsTest {
             @TestMetadata("publicClassObject.kt")
             public void testPublicClassObject() throws Exception {
                 runTest("compiler/testData/writeFlags/innerClass/visibility/publicClassObject.kt");
+            }
+        }
+    }
+
+    @TestMetadata("compiler/testData/writeFlags/jvm8")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Jvm8 extends AbstractWriteFlagsTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInJvm8() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/writeFlags/jvm8"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("interfaceMethod.kt")
+        public void testInterfaceMethod() throws Exception {
+            runTest("compiler/testData/writeFlags/jvm8/interfaceMethod.kt");
+        }
+
+        @TestMetadata("interfaceProperty.kt")
+        public void testInterfaceProperty() throws Exception {
+            runTest("compiler/testData/writeFlags/jvm8/interfaceProperty.kt");
+        }
+
+        @TestMetadata("compiler/testData/writeFlags/jvm8/defaults")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class Defaults extends AbstractWriteFlagsTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInDefaults() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/writeFlags/jvm8/defaults"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            }
+
+            @TestMetadata("defaultMethod.kt")
+            public void testDefaultMethod() throws Exception {
+                runTest("compiler/testData/writeFlags/jvm8/defaults/defaultMethod.kt");
+            }
+
+            @TestMetadata("defaultProperty.kt")
+            public void testDefaultProperty() throws Exception {
+                runTest("compiler/testData/writeFlags/jvm8/defaults/defaultProperty.kt");
+            }
+
+            @TestMetadata("propertyAnnotation.kt")
+            public void testPropertyAnnotation() throws Exception {
+                runTest("compiler/testData/writeFlags/jvm8/defaults/propertyAnnotation.kt");
+            }
+
+            @TestMetadata("compiler/testData/writeFlags/jvm8/defaults/compatibility")
+            @TestDataPath("$PROJECT_ROOT")
+            @RunWith(JUnit3RunnerWithInners.class)
+            public static class Compatibility extends AbstractWriteFlagsTest {
+                private void runTest(String testDataFilePath) throws Exception {
+                    KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+                }
+
+                public void testAllFilesPresentInCompatibility() throws Exception {
+                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/writeFlags/jvm8/defaults/compatibility"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+                }
+
+                @TestMetadata("propertyAccessors.kt")
+                public void testPropertyAccessors() throws Exception {
+                    runTest("compiler/testData/writeFlags/jvm8/defaults/compatibility/propertyAccessors.kt");
+                }
+
+                @TestMetadata("propertyAnnotation.kt")
+                public void testPropertyAnnotation() throws Exception {
+                    runTest("compiler/testData/writeFlags/jvm8/defaults/compatibility/propertyAnnotation.kt");
+                }
             }
         }
     }

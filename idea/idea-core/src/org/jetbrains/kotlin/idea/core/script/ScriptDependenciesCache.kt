@@ -24,7 +24,8 @@ import com.intellij.psi.PsiElementFinder
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.NonClasspathDirectoriesScope
 import com.intellij.util.containers.SLRUMap
-import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import org.jetbrains.kotlin.idea.core.util.EDT
 import org.jetbrains.kotlin.utils.addIfNotNull
 import java.io.File
@@ -80,7 +81,7 @@ class ScriptDependenciesCache(private val project: Project) {
     private fun updateHighlighting(files: List<VirtualFile>) {
         ScriptDependenciesModificationTracker.getInstance(project).incModificationCount()
 
-        launch(EDT(project)) {
+        GlobalScope.launch(EDT(project)) {
             files.filter { it.isValid }.forEach {
                 PsiManager.getInstance(project).findFile(it)?.let { psiFile ->
                     DaemonCodeAnalyzer.getInstance(project).restart(psiFile)
@@ -162,11 +163,9 @@ private class ClearableLazyValue<in R, out T : Any>(
     private val compute: () -> T
 ) : ReadOnlyProperty<R, T> {
     override fun getValue(thisRef: R, property: KProperty<*>): T {
-        lock.read {
+        lock.write {
             if (value == null) {
-                lock.write {
-                    value = compute()
-                }
+                value = compute()
             }
             return value!!
         }
