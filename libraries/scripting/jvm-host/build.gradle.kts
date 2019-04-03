@@ -1,8 +1,9 @@
 
 plugins {
     kotlin("jvm")
-    id("jps-compatible")
 }
+
+jvmTarget = "1.6"
 
 dependencies {
     compile(project(":kotlin-script-runtime"))
@@ -26,9 +27,10 @@ sourceSets {
     "test" { projectDefault() }
 }
 
+publish()
+
 standardPublicJars()
 
-publish()
 
 projectTest {
     workingDir = rootDir

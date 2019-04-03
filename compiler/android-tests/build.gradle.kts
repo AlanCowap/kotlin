@@ -24,8 +24,8 @@ dependencies {
     testCompile(projectTests(":jps-plugin"))
     testCompile(commonDep("junit:junit"))
     testCompile(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "groovy-all", "jps-builders", rootProject = rootProject) }
-    testCompile(intellijDep("jps-standalone")) { includeJars("jps-model") }
-    testCompile(intellijDep("jps-build-test"))
+    testCompile(jpsStandalone()) { includeJars("jps-model") }
+    testCompile(jpsBuildTest())
 }
 
 sourceSets {
@@ -34,7 +34,7 @@ sourceSets {
 }
 
 projectTest {
-    dependsOn(*testDistProjects.map { "$it:dist" }.toTypedArray())
+    dependsOn(":dist")
     doFirst {
         environment("kotlin.tests.android.timeout", "45")
     }

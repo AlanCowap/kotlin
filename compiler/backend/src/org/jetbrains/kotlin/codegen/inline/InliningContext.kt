@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.state.GenerationState
 
 class RootInliningContext(
-    expressionMap: Map<Int, LambdaInfo>,
+    expressionMap: Map<Int, FunctionalArgument>,
     state: GenerationState,
     nameGenerator: NameGenerator,
     val sourceCompilerForInline: SourceCompilerForInline,
@@ -22,7 +22,7 @@ class RootInliningContext(
 
 class RegeneratedClassContext(
     parent: InliningContext,
-    expressionMap: Map<Int, LambdaInfo>,
+    expressionMap: Map<Int, FunctionalArgument>,
     state: GenerationState,
     nameGenerator: NameGenerator,
     typeRemapper: TypeRemapper,
@@ -36,7 +36,7 @@ class RegeneratedClassContext(
 
 open class InliningContext(
     val parent: InliningContext?,
-    val expressionMap: Map<Int, LambdaInfo>,
+    val expressionMap: Map<Int, FunctionalArgument>,
     val state: GenerationState,
     val nameGenerator: NameGenerator,
     val typeRemapper: TypeRemapper,
@@ -45,6 +45,8 @@ open class InliningContext(
 ) {
 
     val isInliningLambda = lambdaInfo != null
+
+    var generateAssertField = false
 
     private val internalNameToAnonymousObjectTransformationInfo = hashMapOf<String, AnonymousObjectTransformationInfo>()
 

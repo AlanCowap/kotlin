@@ -8,12 +8,13 @@ package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
-import org.jetbrains.kotlin.ir.backend.js.ModuleType
 import org.jetbrains.kotlin.ir.backend.js.utils.*
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithVisibility
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrSymbolOwner
 import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
+import org.jetbrains.kotlin.ir.util.isObject
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
@@ -51,29 +52,30 @@ class IrModuleToJsTransformer(private val backendContext: JsIrBackendContext) : 
         return statements
     }
 
-    private fun findModuleExports(module: IrModuleFragment, context: JsGenerationContext): Map<JsName, JsName> {
-        val publicDeclarations = module.files
+    private fun generateExportStatements(
+        module: IrModuleFragment,
+        context: JsGenerationContext,
+        internalModuleName: JsName
+    ): List<JsStatement> {
+        return module.files
             .flatMap { it.declarations }
+            .asSequence()
             .filterIsInstance<IrDeclarationWithVisibility>()
             .filter { it.visibility == Visibilities.PUBLIC }
             .filter { !it.isEffectivelyExternal() }
             .filterIsInstance<IrSymbolOwner>()
+            .map { declaration ->
+                val name = context.getNameForSymbol(declaration.symbol)
 
-        val publicDeclarationNames = publicDeclarations.map {
-            context.getNameForSymbol(it.symbol)
-        }
-
-        return publicDeclarationNames.associate { it to it }
-    }
-
-    private fun generateModuleInGlobalScope(module: IrModuleFragment): JsProgram {
-        val program = JsProgram()
-        val rootContext = JsGenerationContext(JsRootScope(program), backendContext)
-
-        val moduleBody = generateModuleBody(module, rootContext)
-        program.globalBlock.statements += moduleBody
-
-        return program
+                JsExpressionStatement(
+                    if (declaration is IrClass && declaration.isObject) {
+                        defineProperty(internalModuleName.makeRef(), name.ident, getter = JsNameRef("${name.ident}_getInstance"))
+                    } else {
+                        jsAssignment(JsNameRef(name, internalModuleName.makeRef()), name.makeRef())
+                    }
+                )
+            }
+            .toList()
     }
 
     private fun generateModule(module: IrModuleFragment): JsProgram {
@@ -130,13 +132,18 @@ class IrModuleToJsTransformer(private val backendContext: JsIrBackendContext) : 
         }
 
         for (externalClass in backendContext.externalNestedClasses) {
+
+            // External companions are not "nested". Instead they use parent class name.
+            if (externalClass.isCompanion)
+                continue
+
             val declName = rootContext.getNameForDeclaration(externalClass)
             val parentName = rootContext.getNameForDeclaration(externalClass.parentAsClass)
             importStatements.add(
                 JsExpressionStatement(
                     jsAssignment(
                         declName.makeRef(),
-                        JsNameRef(externalClass.name.identifier, parentName.makeRef())
+                        JsNameRef(externalClass.getJsNameOrKotlinName().identifier, parentName.makeRef())
                     )
                 )
             )
@@ -149,11 +156,7 @@ class IrModuleToJsTransformer(private val backendContext: JsIrBackendContext) : 
 
         val moduleBody = generateModuleBody(module, rootContext)
 
-        val moduleExports = findModuleExports(module, rootContext)
-
-        val exportStatements = moduleExports.map { (from, to) ->
-            JsExpressionStatement(jsAssignment(JsNameRef(from, internalModuleName.makeRef()), to.makeRef()))
-        }
+        val exportStatements = generateExportStatements(module, rootContext, internalModuleName)
 
         rootFunction.body.statements += moduleBody
 
@@ -173,12 +176,7 @@ class IrModuleToJsTransformer(private val backendContext: JsIrBackendContext) : 
     }
 
     override fun visitModuleFragment(declaration: IrModuleFragment, data: Nothing?): JsNode =
-        when (backendContext.moduleType) {
-            ModuleType.MAIN -> generateModule(declaration)
-            ModuleType.SECONDARY -> JsEmpty
-            ModuleType.TEST_RUNTIME -> generateModuleInGlobalScope(declaration)
-        }
-
+        generateModule(declaration)
 
     private fun processClassModels(
         classModelMap: Map<JsName, JsClassModel>,

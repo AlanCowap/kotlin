@@ -12,7 +12,6 @@ import org.jetbrains.kotlin.backend.common.descriptors.WrappedVariableDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
-import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
@@ -29,7 +28,6 @@ import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrFail
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.Variance
 
@@ -72,8 +70,8 @@ object JsIrBuilder {
             index,
             type,
             null,
-            false,
-            false
+            isCrossinline = false,
+            isNoinline = false
         ).also {
             descriptor.bind(it)
         }
@@ -106,7 +104,7 @@ object JsIrBuilder {
         isTailrec: Boolean = false,
         isSuspend: Boolean = false,
         origin: IrDeclarationOrigin = SYNTHESIZED_DECLARATION
-    ) = JsIrBuilder.buildFunction(
+    ) = buildFunction(
         Name.identifier(name),
         returnType,
         parent,
@@ -153,8 +151,6 @@ object JsIrBuilder {
 
     fun buildGetObjectValue(type: IrType, classSymbol: IrClassSymbol) =
         IrGetObjectValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, classSymbol)
-
-    fun buildGetClass(expression: IrExpression, type: IrType) = IrGetClassImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, expression)
 
     fun buildGetValue(symbol: IrValueSymbol) =
         IrGetValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, symbol.owner.type, symbol, SYNTHESIZED_STATEMENT)
@@ -254,7 +250,7 @@ object JsIrBuilder {
         IrTypeOperatorCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, operator, toType, symbol, argument)
 
     fun buildImplicitCast(value: IrExpression, toType: IrType) =
-        JsIrBuilder.buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType, toType.classifierOrFail)
+        buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType, toType.classifierOrFail)
 
 
     fun buildNull(type: IrType) = IrConstImpl.constNull(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type)
@@ -262,24 +258,6 @@ object JsIrBuilder {
     fun buildInt(type: IrType, v: Int) = IrConstImpl.int(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, v)
     fun buildString(type: IrType, s: String) = IrConstImpl.string(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, s)
     fun buildCatch(ex: IrVariable, block: IrBlockImpl) = IrCatchImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, ex, block)
-}
-
-object SetDeclarationsParentVisitor : IrElementVisitor<Unit, IrDeclarationParent> {
-    override fun visitElement(element: IrElement, data: IrDeclarationParent) {
-        if (element !is IrDeclarationParent) {
-            element.acceptChildren(this, data)
-        }
-    }
-
-    override fun visitDeclaration(declaration: IrDeclaration, data: IrDeclarationParent) {
-        declaration.parent = data
-        super.visitDeclaration(declaration, data)
-    }
-}
-
-fun IrDeclarationContainer.addChild(declaration: IrDeclaration) {
-    this.declarations += declaration
-    declaration.accept(SetDeclarationsParentVisitor, this)
 }
 
 fun IrClass.simpleFunctions(): List<IrSimpleFunction> = this.declarations.flatMap {

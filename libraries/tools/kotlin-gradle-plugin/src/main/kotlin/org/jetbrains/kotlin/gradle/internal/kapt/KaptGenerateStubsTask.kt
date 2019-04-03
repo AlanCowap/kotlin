@@ -59,12 +59,24 @@ open class KaptGenerateStubsTask : KotlinCompile() {
     internal val kotlinTaskPluginClasspath
         get() = kotlinCompileTask.pluginClasspath
 
+    @get:Input
+    override var useModuleDetection: Boolean
+        get() = kotlinCompileTask.useModuleDetection
+        set(_) {
+            error("KaptGenerateStubsTask.useModuleDetection setter should not be called!")
+        }
+
     override fun source(vararg sources: Any?): SourceTask? {
         return super.source(sourceRootsContainer.add(sources))
     }
 
     override fun setSource(sources: Any?) {
         super.setSource(sourceRootsContainer.set(sources))
+    }
+
+    @Internal
+    override fun getClasspathFqNamesHistoryDir(): File? {
+        return taskBuildDirectory.resolve("classpath-fq-history")
     }
 
     private fun isSourceRootAllowed(source: File): Boolean =

@@ -23,10 +23,11 @@ import org.jetbrains.kotlin.backend.jvm.lower.*
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.util.PatchDeclarationParentsVisitor
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
+import org.jetbrains.kotlin.load.java.JvmAbi
 
 private fun makePatchParentsPhase(number: Int) = namedIrFilePhase(
     lower = object : SameTypeCompilerPhase<CommonBackendContext, IrFile> {
-        override fun invoke(phaseConfig: PhaseConfig, phaserState: PhaserState, context: CommonBackendContext, input: IrFile): IrFile {
+        override fun invoke(phaseConfig: PhaseConfig, phaserState: PhaserState<IrFile>, context: CommonBackendContext, input: IrFile): IrFile {
             input.acceptVoid(PatchDeclarationParentsVisitor())
             return input
         }
@@ -36,10 +37,28 @@ private fun makePatchParentsPhase(number: Int) = namedIrFilePhase(
     nlevels = 0
 )
 
-internal val jvmPhases = namedIrFilePhase(
+private val expectDeclarationsRemovingPhase = makeIrFilePhase(
+    ::ExpectDeclarationsRemoving,
+    name = "ExpectDeclarationsRemoving",
+    description = "Remove expect declaration from module fragment"
+)
+
+private val propertiesPhase = makeIrFilePhase(
+    { context ->
+        PropertiesLowering(context, JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_PROPERTY_ANNOTATIONS) { propertyName ->
+            JvmAbi.getSyntheticMethodNameForAnnotatedProperty(propertyName)
+        }
+    },
+    name = "Properties",
+    description = "Move fields and accessors for properties to their classes",
+    stickyPostconditions = setOf((PropertiesLowering)::checkNoProperties)
+)
+
+val jvmPhases = namedIrFilePhase(
     name = "IrLowering",
     description = "IR lowering",
-    lower = jvmCoercionToUnitPhase then
+    lower = expectDeclarationsRemovingPhase then
+            jvmCoercionToUnitPhase then
             fileClassPhase then
             kCallableNamePropertyPhase then
 
@@ -47,8 +66,10 @@ internal val jvmPhases = namedIrFilePhase(
 
             moveCompanionObjectFieldsPhase then
             constPhase then
+            propertyReferencePhase then
             propertiesToFieldsPhase then
             propertiesPhase then
+            renameFieldsPhase then
             annotationPhase then
 
             jvmDefaultArgumentStubPhase then
@@ -81,7 +102,10 @@ internal val jvmPhases = namedIrFilePhase(
             tailrecPhase then
             toArrayPhase then
             jvmTypeOperatorLoweringPhase then
+            foldConstantLoweringPhase then
+            flattenStringConcatenationPhase then
             jvmBuiltinOptimizationLoweringPhase then
+            additionalClassAnnotationPhase then
 
             makePatchParentsPhase(3)
 )

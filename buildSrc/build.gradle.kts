@@ -4,7 +4,7 @@ buildscript {
 
     val buildSrcKotlinVersion: String by extra(findProperty("buildSrc.kotlin.version")?.toString() ?: embeddedKotlinVersion)
     val buildSrcKotlinRepo: String? by extra(findProperty("buildSrc.kotlin.repo") as String?)
-    extra["versions.shadow"] = "2.0.2"
+    extra["versions.shadow"] = "4.0.3"
     extra["versions.native-platform"] = "0.14"
 
     repositories {
@@ -65,6 +65,7 @@ rootProject.apply {
 val isTeamcityBuild = project.hasProperty("teamcity") || System.getenv("TEAMCITY_VERSION") != null
 val intellijUltimateEnabled by extra(project.getBooleanProperty("intellijUltimateEnabled") ?: isTeamcityBuild)
 val intellijSeparateSdks by extra(project.getBooleanProperty("intellijSeparateSdks") ?: false)
+val verifyDependencyOutput by extra( getBooleanProperty("kotlin.build.dependency.output.verification") ?: isTeamcityBuild)
 
 extra["intellijReleaseType"] = if (extra["versions.intellijSdk"]?.toString()?.endsWith("SNAPSHOT") == true)
     "snapshots"
@@ -73,7 +74,7 @@ else
 
 extra["versions.androidDxSources"] = "5.0.0_r2"
 
-extra["customDepsOrg"] = "kotlin.build.custom.deps"
+extra["customDepsOrg"] = "kotlin.build"
 
 repositories {
     if (cacheRedirectorEnabled) {
@@ -91,6 +92,7 @@ repositories {
 }
 
 dependencies {
+    compile(kotlin("stdlib", embeddedKotlinVersion))
     compile("net.rubygrapefruit:native-platform:${property("versions.native-platform")}")
     compile("net.rubygrapefruit:native-platform-windows-amd64:${property("versions.native-platform")}")
     compile("net.rubygrapefruit:native-platform-windows-i386:${property("versions.native-platform")}")
@@ -109,4 +111,4 @@ samWithReceiver {
 fun Project.`samWithReceiver`(configure: org.jetbrains.kotlin.samWithReceiver.gradle.SamWithReceiverExtension.() -> Unit): Unit =
         extensions.configure("samWithReceiver", configure)
 
-tasks["build"].dependsOn(":prepare-deps:android-dx:build", ":prepare-deps:intellij-sdk:build")
+tasks["build"].dependsOn(":prepare-deps:build")

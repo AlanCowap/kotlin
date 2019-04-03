@@ -8,12 +8,12 @@ package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.backend.js.utils.JsGenerationContext
 import org.jetbrains.kotlin.ir.backend.js.utils.Namer
+import org.jetbrains.kotlin.ir.backend.js.utils.getJsName
 import org.jetbrains.kotlin.ir.backend.js.utils.realOverrideTarget
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.types.IrDynamicType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.util.OperatorNameConventions
@@ -137,10 +137,11 @@ class IrElementToJsExpressionTransformer : BaseIrElementToJsNodeTransformer<JsEx
         val arguments = translateCallArguments(expression, context)
 
         // Transform external property accessor call
-        if (function is IrSimpleFunction) {
+        // @JsName-annotated external property accessors are translated as function calls
+        if (function is IrSimpleFunction && function.getJsName() == null) {
             val property = function.correspondingProperty
             if (property != null && property.isEffectivelyExternal()) {
-                val nameRef = JsNameRef(property.name.identifier, jsDispatchReceiver)
+                val nameRef = JsNameRef(context.getNameForDeclaration(property), jsDispatchReceiver)
                 return when (function) {
                     property.getter -> nameRef
                     property.setter -> jsAssignment(nameRef, arguments.single())
@@ -162,8 +163,16 @@ class IrElementToJsExpressionTransformer : BaseIrElementToJsNodeTransformer<JsEx
             val targetName = context.getNameForSymbol(target.symbol)
             val qPrototype = JsNameRef(targetName, prototypeOf(qualifierName))
             val callRef = JsNameRef(Namer.CALL_FUNCTION, qPrototype)
-            return JsInvocation(callRef, jsDispatchReceiver?.let { listOf(it) + arguments } ?: arguments)
+            return JsInvocation(callRef, jsDispatchReceiver?.let { receiver -> listOf(receiver) + arguments } ?: arguments)
         }
+
+        val varargParameterIndex = function.valueParameters.indexOfFirst { it.varargElementType != null }
+        val isExternalVararg = function.isEffectivelyExternal() && varargParameterIndex != -1
+
+        val symbolName = context.getNameForSymbol(symbol)
+        val ref = if (function is IrSimpleFunction && jsDispatchReceiver != null) JsNameRef(symbolName, jsDispatchReceiver) else JsNameRef(
+            symbolName
+        )
 
         return if (function is IrConstructor) {
             // Inline class primary constructor takes a single value of to
@@ -177,12 +186,66 @@ class IrElementToJsExpressionTransformer : BaseIrElementToJsNodeTransformer<JsEx
                 // Argument value constructs unboxed inline class instance
                 arguments.single()
             } else {
-                JsNew(context.getNameForSymbol(symbol).makeRef(), arguments)
+                JsNew(ref, arguments)
+            }
+        } else if (isExternalVararg) {
+
+            // External vararg arguments should be represented in JS as multiple "plain" arguments (opposed to arrays in Kotlin)
+            // We are using `Function.prototype.apply` function to pass all arguments as a single array.
+            // For this purpose are concatenating non-vararg arguments with vararg.
+            // TODO: Don't use `Function.prototype.apply` when number of arguments is known at compile time (e.g. there are no spread operators)
+            val arrayConcat = JsNameRef("concat", JsArrayLiteral())
+            val arraySliceCall = JsNameRef("call", JsNameRef("slice", JsArrayLiteral()))
+
+            val argumentsAsSingleArray = JsInvocation(
+                arrayConcat,
+                listOfNotNull(jsExtensionReceiver) + arguments.mapIndexed { index, argument ->
+                    when (index) {
+
+                        // Call `Array.prototype.slice` on vararg arguments in order to convert array-like objects into proper arrays
+                        // TODO: Optimize for proper arrays
+                        varargParameterIndex -> JsInvocation(arraySliceCall, argument)
+
+                        // TODO: Don't wrap non-array-like arguments with array literal
+                        // TODO: Wrap adjacent non-vararg arguments in a single array literal
+                        else -> JsArrayLiteral(listOf(argument))
+                    }
+                }
+            )
+
+            if (function is IrSimpleFunction && jsDispatchReceiver != null) {
+                // TODO: Do not create IIFE when receiver expression is simple or has no side effects
+                // TODO: Do not create IIFE at all? (Currently there is no reliable way to create temporary variable in current scope)
+                val receiverName = context.currentScope.declareFreshName("\$externalVarargReceiverTmp")
+                val receiverRef = receiverName.makeRef()
+                JsInvocation(
+                    // Create scope for temporary variable holding dispatch receiver
+                    // It is used both during method reference and passing `this` value to `apply` function.
+                    JsFunction(
+                        context.currentScope,
+                        JsBlock(
+                            JsVars(JsVars.JsVar(receiverName, jsDispatchReceiver)),
+                            JsReturn(
+                                JsInvocation(
+                                    JsNameRef("apply", JsNameRef(symbolName, receiverRef)),
+                                    listOf(
+                                        receiverRef,
+                                        argumentsAsSingleArray
+                                    )
+                                )
+                            )
+                        ),
+                        "VarargIIFE"
+                    )
+                )
+            } else {
+                JsInvocation(
+                    JsNameRef("apply", JsNameRef(symbolName)),
+                    listOf(JsNullLiteral(), argumentsAsSingleArray)
+                )
             }
         } else {
-            val symbolName = context.getNameForSymbol(symbol)
-            val ref = if (jsDispatchReceiver != null) JsNameRef(symbolName, jsDispatchReceiver) else JsNameRef(symbolName)
-            JsInvocation(ref, jsExtensionReceiver?.let { listOf(jsExtensionReceiver) + arguments } ?: arguments)
+            JsInvocation(ref, listOfNotNull(jsExtensionReceiver) + arguments)
         }
     }
 
@@ -276,8 +339,6 @@ class IrElementToJsExpressionTransformer : BaseIrElementToJsNodeTransformer<JsEx
         val receiverType = simpleFunction.dispatchReceiverParameter?.type ?: return false
 
         if (simpleFunction.isSuspend) return false
-
-        if (receiverType is IrDynamicType) return call.origin == IrStatementOrigin.INVOKE
 
         return simpleFunction.name == OperatorNameConventions.INVOKE && receiverType.isFunctionTypeOrSubtype()
     }

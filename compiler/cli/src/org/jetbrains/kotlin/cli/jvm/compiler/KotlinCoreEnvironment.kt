@@ -27,6 +27,7 @@ import com.intellij.core.JavaCoreProjectEnvironment
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.lang.MetaLanguage
 import com.intellij.lang.java.JavaParserDefinition
+import com.intellij.mock.MockProject
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.TransactionGuard
 import com.intellij.openapi.application.TransactionGuardImpl
@@ -73,7 +74,7 @@ import org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PRO
 import org.jetbrains.kotlin.cli.common.config.ContentRoot
 import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.config.kotlinSourceRoots
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
+import org.jetbrains.kotlin.cli.common.extensions.ScriptEvaluationExtension
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.STRONG_WARNING
@@ -104,6 +105,7 @@ import org.jetbrains.kotlin.parsing.KotlinParserDefinition
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.CodeAnalyzerInitializer
 import org.jetbrains.kotlin.resolve.ModuleAnnotationsResolver
+import org.jetbrains.kotlin.resolve.extensions.ExtraImportsProviderExtension
 import org.jetbrains.kotlin.resolve.extensions.SyntheticResolveExtension
 import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade
 import org.jetbrains.kotlin.resolve.jvm.extensions.AnalysisHandlerExtension
@@ -111,7 +113,6 @@ import org.jetbrains.kotlin.resolve.jvm.extensions.PackageFragmentProviderExtens
 import org.jetbrains.kotlin.resolve.jvm.modules.JavaModuleResolver
 import org.jetbrains.kotlin.resolve.lazy.declarations.CliDeclarationProviderFactoryService
 import org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactoryService
-import org.jetbrains.kotlin.resolve.multiplatform.isCommonSource
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.lang.reflect.Field
@@ -138,23 +139,10 @@ class KotlinCoreEnvironment private constructor(
                         ServiceManager.getService(this, JavaFileManager::class.java) as CoreJavaFileManager
                     )
 
-                    val traceHolder = CliTraceHolder()
-                    val cliLightClassGenerationSupport = CliLightClassGenerationSupport(traceHolder)
-                    val kotlinAsJavaSupport = CliKotlinAsJavaSupport(this, traceHolder)
-                    registerService(LightClassGenerationSupport::class.java, cliLightClassGenerationSupport)
-                    registerService(CliLightClassGenerationSupport::class.java, cliLightClassGenerationSupport)
-                    registerService(KotlinAsJavaSupport::class.java, kotlinAsJavaSupport)
-                    registerService(CodeAnalyzerInitializer::class.java, traceHolder)
+                    registerKotlinLightClassSupport(project)
 
                     registerService(ExternalAnnotationsManager::class.java, MockExternalAnnotationsManager())
                     registerService(InferredAnnotationsManager::class.java, MockInferredAnnotationsManager())
-
-                    val area = Extensions.getArea(this)
-
-                    area.getExtensionPoint(PsiElementFinder.EP_NAME).registerExtension(JavaElementFinder(this, kotlinAsJavaSupport))
-                    area.getExtensionPoint(PsiElementFinder.EP_NAME).registerExtension(
-                        PsiElementFinderImpl(this, ServiceManager.getService(this, JavaFileManager::class.java))
-                    )
                 }
 
                 super.registerJavaPsiFacade()
@@ -177,17 +165,7 @@ class KotlinCoreEnvironment private constructor(
 
         val project = projectEnvironment.project
 
-        ExpressionCodegenExtension.registerExtensionPoint(project)
-        SyntheticResolveExtension.registerExtensionPoint(project)
-        ClassBuilderInterceptorExtension.registerExtensionPoint(project)
-        AnalysisHandlerExtension.registerExtensionPoint(project)
-        PackageFragmentProviderExtension.registerExtensionPoint(project)
-        StorageComponentContainerContributor.registerExtensionPoint(project)
-        DeclarationAttributeAltererExtension.registerExtensionPoint(project)
-        PreprocessedVirtualFileFactoryExtension.registerExtensionPoint(project)
-        JsSyntheticTranslateExtension.registerExtensionPoint(project)
-        CompilerConfigurationExtension.registerExtensionPoint(project)
-        IrGenerationExtension.registerExtensionPoint(project)
+        registerPluginExtensionPoints(project)
 
         val messageCollector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
 
@@ -213,7 +191,7 @@ class KotlinCoreEnvironment private constructor(
 
         registerProjectServicesForCLI(projectEnvironment)
 
-        registerProjectServices(projectEnvironment, messageCollector)
+        registerProjectServices(projectEnvironment.project)
 
         for (extension in CompilerConfigurationExtension.getInstances(project)) {
             extension.updateConfiguration(configuration)
@@ -221,9 +199,7 @@ class KotlinCoreEnvironment private constructor(
 
         sourceFiles += createKtFiles(project)
 
-        val (newSourcesClasspath, newSources, _) = collectScriptsCompilationDependencies(configuration, project, sourceFiles)
-        configuration.addJvmClasspathRoots(newSourcesClasspath)
-        sourceFiles += newSources
+        collectAdditionalSources(project)
 
         sourceFiles.sortBy { it.virtualFile.path }
 
@@ -287,6 +263,32 @@ class KotlinCoreEnvironment private constructor(
         project.putUserData(APPEND_JAVA_SOURCE_ROOTS_HANDLER_KEY, fun(roots: List<File>) {
             updateClasspath(roots.map { JavaSourceRoot(it, null) })
         })
+    }
+
+    private fun collectAdditionalSources(project: MockProject) {
+        var unprocessedSources: Collection<KtFile> = sourceFiles
+        val processedSources = HashSet<KtFile>()
+        val processedSourcesByExtension = HashMap<CollectAdditionalSourcesExtension, Collection<KtFile>>()
+        // repeat feeding extensions with sources while new sources a being added
+        var sourceCollectionIterations = 0
+        while (unprocessedSources.isNotEmpty()) {
+            if (sourceCollectionIterations++ > 10) { // TODO: consider using some appropriate global constant
+                throw IllegalStateException("Unable to collect additional sources in reasonable number of iterations")
+            }
+            processedSources.addAll(unprocessedSources)
+            val allNewSources = ArrayList<KtFile>()
+            for (extension in CollectAdditionalSourcesExtension.getInstances(project)) {
+                // do not feed the extension with the sources it returned on the previous iteration
+                val sourcesToProcess = unprocessedSources - (processedSourcesByExtension[extension] ?: emptyList())
+                val newSources = extension.collectAdditionalSourcesAndUpdateConfiguration(sourcesToProcess, configuration, project)
+                if (newSources.isNotEmpty()) {
+                    allNewSources.addAll(newSources)
+                    processedSourcesByExtension[extension] = newSources
+                }
+            }
+            unprocessedSources = allNewSources.filterNot { processedSources.contains(it) }.distinct()
+            sourceFiles += unprocessedSources
+        }
     }
 
     fun createPackagePartProvider(scope: GlobalSearchScope): JvmPackagePartProvider {
@@ -405,7 +407,7 @@ class KotlinCoreEnvironment private constructor(
     private fun createKtFiles(project: Project): List<KtFile> =
         createSourceFilesFromSourceRoots(configuration, project, getSourceRootsCheckingForDuplicates())
 
-    internal fun report(severity: CompilerMessageSeverity, message: String) = report(configuration, severity, message)
+    internal fun report(severity: CompilerMessageSeverity, message: String) = configuration.report(severity, message)
 
     companion object {
         private val LOG = Logger.getInstance(KotlinCoreEnvironment::class.java)
@@ -457,67 +459,6 @@ class KotlinCoreEnvironment private constructor(
 
         // used in the daemon for jar cache cleanup
         val applicationEnvironment: JavaCoreApplicationEnvironment? get() = ourApplicationEnvironment
-
-        internal fun report(
-            configuration: CompilerConfiguration,
-            severity: CompilerMessageSeverity,
-            message: String,
-            location: CompilerMessageLocation? = null
-        ) {
-            configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY).report(severity, message, location)
-        }
-
-        internal fun createSourceFilesFromSourceRoots(
-            configuration: CompilerConfiguration,
-            project: Project,
-            sourceRoots: List<KotlinSourceRoot>,
-            reportLocation: CompilerMessageLocation? = null
-        ): MutableList<KtFile> {
-            val localFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL)
-            val psiManager = PsiManager.getInstance(project)
-
-            val processedFiles = hashSetOf<VirtualFile>()
-            val result = mutableListOf<KtFile>()
-
-            val virtualFileCreator = PreprocessedFileCreator(project)
-
-            for ((sourceRootPath, isCommon) in sourceRoots) {
-                val vFile = localFileSystem.findFileByPath(sourceRootPath)
-                if (vFile == null) {
-                    val message = "Source file or directory not found: $sourceRootPath"
-
-                    val buildFilePath = configuration.get(JVMConfigurationKeys.MODULE_XML_FILE)
-                    if (buildFilePath != null && Logger.isInitialized()) {
-                        KotlinCoreEnvironment.LOG.warn("$message\n\nbuild file path: $buildFilePath\ncontent:\n${buildFilePath.readText()}")
-                    }
-
-                    report(configuration, ERROR, message, reportLocation)
-                    continue
-                }
-
-                if (!vFile.isDirectory && vFile.fileType != KotlinFileType.INSTANCE) {
-                    report(configuration, ERROR, "Source entry is not a Kotlin file: $sourceRootPath", reportLocation)
-                    continue
-                }
-
-                for (file in File(sourceRootPath).walkTopDown()) {
-                    if (!file.isFile) continue
-
-                    val virtualFile = localFileSystem.findFileByPath(file.absolutePath)?.let(virtualFileCreator::create)
-                    if (virtualFile != null && processedFiles.add(virtualFile)) {
-                        val psiFile = psiManager.findFile(virtualFile)
-                        if (psiFile is KtFile) {
-                            result.add(psiFile)
-                            if (isCommon) {
-                                psiFile.isCommonSource = true
-                            }
-                        }
-                    }
-                }
-            }
-
-            return result
-        }
 
         private fun getOrCreateApplicationEnvironmentForProduction(configuration: CompilerConfiguration): JavaCoreApplicationEnvironment {
             synchronized(APPLICATION_LOCK) {
@@ -641,6 +582,25 @@ class KotlinCoreEnvironment private constructor(
             })
         }
 
+        @JvmStatic
+        @Suppress("MemberVisibilityCanPrivate") // made public for CLI Android Lint
+        fun registerPluginExtensionPoints(project: MockProject) {
+            ExpressionCodegenExtension.registerExtensionPoint(project)
+            SyntheticResolveExtension.registerExtensionPoint(project)
+            ClassBuilderInterceptorExtension.registerExtensionPoint(project)
+            AnalysisHandlerExtension.registerExtensionPoint(project)
+            PackageFragmentProviderExtension.registerExtensionPoint(project)
+            StorageComponentContainerContributor.registerExtensionPoint(project)
+            DeclarationAttributeAltererExtension.registerExtensionPoint(project)
+            PreprocessedVirtualFileFactoryExtension.registerExtensionPoint(project)
+            JsSyntheticTranslateExtension.registerExtensionPoint(project)
+            CompilerConfigurationExtension.registerExtensionPoint(project)
+            CollectAdditionalSourcesExtension.registerExtensionPoint(project)
+            ExtraImportsProviderExtension.registerExtensionPoint(project)
+            IrGenerationExtension.registerExtensionPoint(project)
+            ScriptEvaluationExtension.registerExtensionPoint(project)
+        }
+
         private fun registerApplicationServicesForCLI(applicationEnvironment: JavaCoreApplicationEnvironment) {
             // ability to get text from annotations xml files
             applicationEnvironment.registerFileType(PlainTextFileType.INSTANCE, "xml")
@@ -661,7 +621,8 @@ class KotlinCoreEnvironment private constructor(
             }
         }
 
-        private fun registerProjectExtensionPoints(area: ExtensionsArea) {
+        @JvmStatic
+        fun registerProjectExtensionPoints(area: ExtensionsArea) {
             CoreApplicationEnvironment.registerExtensionPoint(
                 area, PsiTreeChangePreprocessor.EP_NAME, PsiTreeChangePreprocessor::class.java
             )
@@ -672,8 +633,15 @@ class KotlinCoreEnvironment private constructor(
 
         // made public for Upsource
         @JvmStatic
+        @Deprecated("Use registerProjectServices(project) instead.", ReplaceWith("registerProjectServices(projectEnvironment.project)"))
         fun registerProjectServices(projectEnvironment: JavaCoreProjectEnvironment, messageCollector: MessageCollector?) {
-            with(projectEnvironment.project) {
+            registerProjectServices(projectEnvironment.project)
+        }
+
+        // made public for Android Lint
+        @JvmStatic
+        fun registerProjectServices(project: MockProject) {
+            with(project) {
                 registerService(KotlinJavaPsiFacade::class.java, KotlinJavaPsiFacade(this))
                 registerService(KtLightClassForFacade.FacadeStubCache::class.java, KtLightClassForFacade.FacadeStubCache(this))
                 registerService(ModuleAnnotationsResolver::class.java, CliModuleAnnotationsResolver())
@@ -685,6 +653,27 @@ class KotlinCoreEnvironment private constructor(
              * Note that Kapt may restart code analysis process, and CLI services should be aware of that.
              * Use PsiManager.getModificationTracker() to ensure that all the data you cached is still valid.
              */
+        }
+
+        // made public for Android Lint
+        @JvmStatic
+        fun registerKotlinLightClassSupport(project: MockProject) {
+            with(project) {
+                val traceHolder = CliTraceHolder()
+                val cliLightClassGenerationSupport = CliLightClassGenerationSupport(traceHolder)
+                val kotlinAsJavaSupport = CliKotlinAsJavaSupport(this, traceHolder)
+                registerService(LightClassGenerationSupport::class.java, cliLightClassGenerationSupport)
+                registerService(CliLightClassGenerationSupport::class.java, cliLightClassGenerationSupport)
+                registerService(KotlinAsJavaSupport::class.java, kotlinAsJavaSupport)
+                registerService(CodeAnalyzerInitializer::class.java, traceHolder)
+
+                val area = Extensions.getArea(this)
+
+                area.getExtensionPoint(PsiElementFinder.EP_NAME).registerExtension(JavaElementFinder(this, kotlinAsJavaSupport))
+                area.getExtensionPoint(PsiElementFinder.EP_NAME).registerExtension(
+                    PsiElementFinderImpl(this, ServiceManager.getService(this, JavaFileManager::class.java))
+                )
+            }
         }
 
         private fun CompilerConfiguration.setupJdkClasspathRoots(configFiles: EnvironmentConfigFiles) {
@@ -705,8 +694,7 @@ class KotlinCoreEnvironment private constructor(
 
             if (!CoreJrtFileSystem.isModularJdk(javaRoot)) {
                 if (classesRoots.isEmpty()) {
-                    val messageCollector = get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
-                    messageCollector?.report(ERROR, "No class roots are found in the JDK path: $javaRoot")
+                    report(ERROR, "No class roots are found in the JDK path: $javaRoot")
                 } else {
                     addJvmSdkRoots(classesRoots)
                 }

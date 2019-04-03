@@ -11,21 +11,20 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.SimpleType
 
 typealias SymbolToTransformer = MutableMap<IrFunctionSymbol, (IrCall) -> IrExpression>
 
-internal fun SymbolToTransformer.add(from: Map<SimpleType, IrFunction>, to: IrFunction) {
+internal fun SymbolToTransformer.add(from: Map<SimpleType, IrFunctionSymbol>, to: IrFunctionSymbol) {
     from.forEach { _, func ->
-        add(func.symbol, to)
+        add(func, to)
     }
 }
 
-internal fun SymbolToTransformer.add(from: Map<SimpleType, IrFunction>, to: (IrCall) -> IrExpression) {
+internal fun SymbolToTransformer.add(from: Map<SimpleType, IrFunctionSymbol>, to: (IrCall) -> IrExpression) {
     from.forEach { _, func ->
-        add(func.symbol, to)
+        add(func, to)
     }
 }
 
@@ -33,8 +32,8 @@ internal fun SymbolToTransformer.add(from: IrFunctionSymbol, to: (IrCall) -> IrE
     put(from, to)
 }
 
-internal fun SymbolToTransformer.add(from: IrFunctionSymbol, to: IrFunction, dispatchReceiverAsFirstArgument: Boolean = false) {
-    put(from) { call -> irCall(call, to.symbol, dispatchReceiverAsFirstArgument) }
+internal fun SymbolToTransformer.add(from: IrFunctionSymbol, to: IrFunctionSymbol, dispatchReceiverAsFirstArgument: Boolean = false) {
+    put(from) { call -> irCall(call, to, dispatchReceiverAsFirstArgument) }
 }
 
 internal fun <K> MutableMap<K, (IrCall) -> IrExpression>.addWithPredicate(
@@ -68,16 +67,11 @@ internal class SimpleMemberKey(val klass: IrType, val name: Name) {
         other as SimpleMemberKey
 
         if (name != other.name) return false
-        if (klass.originalKotlinType != other.klass.originalKotlinType) return false
 
-        return true
+        return klass.isEqualTo(other.klass)
     }
 
-    override fun hashCode(): Int {
-        var result = klass.originalKotlinType?.hashCode() ?: 0
-        result = 31 * result + name.hashCode()
-        return result
-    }
+    override fun hashCode() = 31 * klass.toHashCode() + name.hashCode()
 }
 
 enum class PrimitiveType {

@@ -10,7 +10,7 @@ import org.gradle.kotlin.dsl.*
 buildscript {
     extra["defaultSnapshotVersion"] = "1.3-SNAPSHOT"
 
-    kotlinBootstrapFrom(BootstrapOption.TeamCity("1.3.30-dev-1419", onlySuccessBootstrap = false))
+    kotlinBootstrapFrom(BootstrapOption.TeamCity("1.3.40-dev-431", onlySuccessBootstrap = false))
 
     repositories.withRedirector(project) {
         bootstrapKotlinRepo?.let(::maven)
@@ -35,10 +35,12 @@ buildscript {
             classpath("org.jetbrains.kotlin.ultimate:buildSrc:1.0")
         }
     }
+
+    project(":prepare:idea-plugin").evaluationDependsOn(":prepare")
 }
 
 plugins {
-    `build-scan` version "1.15"
+    `build-scan`
     idea
     id("jps-compatible")
     id("org.jetbrains.gradle.plugin.idea-ext")
@@ -156,6 +158,10 @@ extra["versions.jflex"] = "1.7.0"
 extra["versions.markdown"] = "0.1.25"
 extra["versions.trove4j"] = "1.0.20181211"
 
+if (!project.hasProperty("versions.kotlin-native")) {
+    extra["versions.kotlin-native"] = "1.3-dev-9171"
+}
+
 val isTeamcityBuild = project.hasProperty("teamcity") || System.getenv("TEAMCITY_VERSION") != null
 val intellijUltimateEnabled = project.getBooleanProperty("intellijUltimateEnabled") ?: isTeamcityBuild
 val effectSystemEnabled by extra(project.getBooleanProperty("kotlin.compiler.effectSystemEnabled") ?: false)
@@ -225,7 +231,8 @@ extra["compilerModules"] = arrayOf(
         ":core:descriptors",
         ":core:descriptors.jvm",
         ":core:deserialization",
-        ":core:util.runtime"
+        ":core:util.runtime",
+        ":core:type-system"
 )
 
 val coreLibProjects = listOf(
@@ -299,12 +306,13 @@ allprojects {
     val mirrorRepo: String? = findProperty("maven.repository.mirror")?.toString()
 
     repositories {
-        intellijSdkRepo(project)
-        androidDxJarRepo(project)
+        kotlinBuildLocalRepo(project)
         mirrorRepo?.let(::maven)
         bootstrapKotlinRepo?.let(::maven)
         jcenter()
         maven(protobufRepo)
+        maven(intellijRepo)
+        maven(bootstrapKotlinRepo!!.replace("artifacts/content/maven/", "artifacts/content/internal/repo"))
     }
 
     configureJvmProject(javaHome!!, jvmTarget!!)
@@ -336,10 +344,6 @@ allprojects {
 
     tasks.withType<Javadoc> {
         enabled = false
-    }
-
-    task<Jar>("javadocJar") {
-        classifier = "javadoc"
     }
 
     tasks.withType<Jar> {
@@ -443,8 +447,6 @@ tasks {
 
     create("coreLibsTest") {
         (coreLibProjects + listOf(
-                ":kotlin-stdlib-jre7",
-                ":kotlin-stdlib-jre8",
                 ":kotlin-stdlib:samples",
                 ":kotlin-test:kotlin-test-js:kotlin-test-js-it",
                 ":kotlinx-metadata-jvm",
@@ -478,6 +480,11 @@ tasks {
         dependsOn(":js:js.tests:runMocha")
     }
 
+    create("firCompilerTest") {
+        dependsOn(":compiler:fir:psi2fir:test")
+        dependsOn(":compiler:fir:resolve:test")
+    }
+
     create("scriptingTest") {
         dependsOn("dist")
         dependsOn(":kotlin-script-util:test")
@@ -487,6 +494,7 @@ tasks {
     create("compilerTest") {
         dependsOn("jvmCompilerTest")
         dependsOn("jsCompilerTest")
+        dependsOn("firCompilerTest")
 
         dependsOn("scriptingTest")
         dependsOn(":kotlin-build-common:test")
@@ -537,7 +545,7 @@ tasks {
                   ":idea:idea-gradle-native:test",
                   ":idea:idea-maven:test",
                   ":j2k:test",
-                  ":eval4j:test")
+                  ":idea:eval4j:test")
     }
 
     create("idea-plugin-tests") {

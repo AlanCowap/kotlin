@@ -33,4 +33,69 @@ public class FirMultiModuleResolveTestGenerated extends AbstractFirMultiModuleRe
     public void testBasic() throws Exception {
         runTest("idea/testData/fir/multiModule/basic/");
     }
+
+    @TestMetadata("basicWithAnnotatedJava")
+    public void testBasicWithAnnotatedJava() throws Exception {
+        runTest("idea/testData/fir/multiModule/basicWithAnnotatedJava/");
+    }
+
+    @TestMetadata("basicWithAnnotatedOverriddenJava")
+    public void testBasicWithAnnotatedOverriddenJava() throws Exception {
+        runTest("idea/testData/fir/multiModule/basicWithAnnotatedOverriddenJava/");
+    }
+
+    @TestMetadata("basicWithJava")
+    public void testBasicWithJava() throws Exception {
+        runTest("idea/testData/fir/multiModule/basicWithJava/");
+    }
+
+    @TestMetadata("basicWithJavaFakeOverride")
+    public void testBasicWithJavaFakeOverride() throws Exception {
+        runTest("idea/testData/fir/multiModule/basicWithJavaFakeOverride/");
+    }
+
+    @TestMetadata("basicWithPrimitiveJava")
+    public void testBasicWithPrimitiveJava() throws Exception {
+        runTest("idea/testData/fir/multiModule/basicWithPrimitiveJava/");
+    }
+
+    @TestMetadata("fullWithJavaPredefinedSignature")
+    public void testFullWithJavaPredefinedSignature() throws Exception {
+        runTest("idea/testData/fir/multiModule/fullWithJavaPredefinedSignature/");
+    }
+
+    @TestMetadata("javaInheritsKotlinExtension")
+    public void testJavaInheritsKotlinExtension() throws Exception {
+        runTest("idea/testData/fir/multiModule/javaInheritsKotlinExtension/");
+    }
+
+    @TestMetadata("javaInheritsRawKotlin")
+    public void testJavaInheritsRawKotlin() throws Exception {
+        runTest("idea/testData/fir/multiModule/javaInheritsRawKotlin/");
+    }
+
+    @TestMetadata("mppFakeOverrides")
+    public void testMppFakeOverrides() throws Exception {
+        runTest("idea/testData/fir/multiModule/mppFakeOverrides/");
+    }
+
+    @TestMetadata("mppMemberType")
+    public void testMppMemberType() throws Exception {
+        runTest("idea/testData/fir/multiModule/mppMemberType/");
+    }
+
+    @TestMetadata("mppMembers")
+    public void testMppMembers() throws Exception {
+        runTest("idea/testData/fir/multiModule/mppMembers/");
+    }
+
+    @TestMetadata("mppSuperTypes")
+    public void testMppSuperTypes() throws Exception {
+        runTest("idea/testData/fir/multiModule/mppSuperTypes/");
+    }
+
+    @TestMetadata("overrideWithJava")
+    public void testOverrideWithJava() throws Exception {
+        runTest("idea/testData/fir/multiModule/overrideWithJava/");
+    }
 }

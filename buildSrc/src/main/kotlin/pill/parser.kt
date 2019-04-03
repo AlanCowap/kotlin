@@ -64,8 +64,6 @@ data class PSourceRootKotlinOptions(
     val apiVersion: String?,
     val languageVersion: String?,
     val jvmTarget: String?,
-    val addCompilerBuiltIns: Boolean?,
-    val loadBuiltInsFromDependencies: Boolean?,
     val extraArguments: List<String>
 ) {
     fun intersect(other: PSourceRootKotlinOptions) = PSourceRootKotlinOptions(
@@ -75,8 +73,6 @@ data class PSourceRootKotlinOptions(
         if (apiVersion == other.apiVersion) apiVersion else null,
         if (languageVersion == other.languageVersion) languageVersion else null,
         if (jvmTarget == other.jvmTarget) jvmTarget else null,
-        if (addCompilerBuiltIns == other.addCompilerBuiltIns) addCompilerBuiltIns else null,
-        if (loadBuiltInsFromDependencies == other.loadBuiltInsFromDependencies) loadBuiltInsFromDependencies else null,
         extraArguments.intersect(other.extraArguments).toList()
     )
 }
@@ -244,7 +240,7 @@ private fun parseSourceRoots(project: Project): List<PSourceRoot> {
 
     for (sourceSet in project.sourceSets) {
         val kotlinCompileTask = kotlinTasksBySourceSet[sourceSet.name]
-        val kind = if (sourceSet.name == SourceSet.TEST_SOURCE_SET_NAME) Kind.TEST else Kind.PRODUCTION
+        val kind = if (sourceSet.isTestSourceSet) Kind.TEST else Kind.PRODUCTION
 
         fun Any.getKotlin(): SourceDirectorySet {
             val kotlinMethod = javaClass.getMethod("getKotlin")
@@ -298,9 +294,8 @@ private fun parseSourceRoots(project: Project): List<PSourceRoot> {
 
 private fun parseResourceRootsProcessedByProcessResourcesTask(project: Project, sourceSet: SourceSet): List<PSourceRoot> {
     val isMainSourceSet = sourceSet.name == SourceSet.MAIN_SOURCE_SET_NAME
-    val isTestSourceSet = sourceSet.name == SourceSet.TEST_SOURCE_SET_NAME
 
-    val resourceRootKind = if (isTestSourceSet) PSourceRoot.Kind.TEST_RESOURCES else PSourceRoot.Kind.RESOURCES
+    val resourceRootKind = if (sourceSet.isTestSourceSet) PSourceRoot.Kind.TEST_RESOURCES else PSourceRoot.Kind.RESOURCES
     val taskNameBase = "processResources"
     val taskName = if (isMainSourceSet) taskNameBase else sourceSet.name + taskNameBase.capitalize()
     val task = project.tasks.findByName(taskName) as? ProcessResources ?: return emptyList()
@@ -319,20 +314,21 @@ private fun parseResourceRootsProcessedByProcessResourcesTask(project: Project, 
     return roots.map { PSourceRoot(it, resourceRootKind, null) }
 }
 
+private val SourceSet.isTestSourceSet: Boolean
+    get() = name == SourceSet.TEST_SOURCE_SET_NAME
+            || name.endsWith("Test")
+            || name.endsWith("Tests")
+
 private fun getKotlinOptions(kotlinCompileTask: Any): PSourceRootKotlinOptions? {
     val compileArguments = kotlinCompileTask.invokeInternal("getSerializedCompilerArguments") as List<String>
     fun parseBoolean(name: String) = compileArguments.contains("-$name")
     fun parseString(name: String) = compileArguments.dropWhile { it != "-$name" }.drop(1).firstOrNull()
-
-    val addCompilerBuiltins = "Xadd-compiler-builtins"
-    val loadBuiltinsFromDependencies = "Xload-builtins-from-dependencies"
 
     fun isOptionForScriptingCompilerPlugin(option: String)
             = option.startsWith("-Xplugin=") && option.contains("kotlin-scripting-compiler")
 
     val extraArguments = compileArguments.filter {
         it.startsWith("-X") && !isOptionForScriptingCompilerPlugin(it)
-                && it != "-$addCompilerBuiltins" && it != "-$loadBuiltinsFromDependencies"
     }
 
     return PSourceRootKotlinOptions(
@@ -342,8 +338,6 @@ private fun getKotlinOptions(kotlinCompileTask: Any): PSourceRootKotlinOptions? 
             parseString("api-version"),
             parseString("language-version"),
             parseString("jvm-target"),
-            parseBoolean(addCompilerBuiltins),
-            parseBoolean(loadBuiltinsFromDependencies),
             extraArguments
     )
 }

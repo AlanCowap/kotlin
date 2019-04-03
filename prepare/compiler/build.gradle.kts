@@ -71,7 +71,7 @@ dependencies {
 
     trove4jJar(intellijDep()) { includeIntellijCoreJarDependencies(project) { it.startsWith("trove4j") } }
 
-    fatJarContents(project(":core:builtins"))
+    fatJarContents(kotlinBuiltins())
     fatJarContents(commonDep("javax.inject"))
     fatJarContents(commonDep("org.jline", "jline"))
     fatJarContents(commonDep("org.fusesource.jansi", "jansi"))
@@ -87,9 +87,11 @@ dependencies {
         }
     }
     fatJarContents(intellijDep()) { includeJars("jna-platform", "lz4-1.3.0") }
-    fatJarContentsStripServices(intellijDep("jps-standalone")) { includeJars("jps-model") }
+    fatJarContentsStripServices(jpsStandalone()) { includeJars("jps-model") }
     fatJarContentsStripMetadata(intellijDep()) { includeJars("oro-2.0.8", "jdom", "log4j" ) }
 }
+
+publish()
 
 noDefaultJar()
 
@@ -156,5 +158,3 @@ sourcesJar {
 }
 
 javadocJar()
-
-publish()

@@ -6,7 +6,6 @@
 package org.jetbrains.kotlin.gradle.tasks
 
 import org.gradle.api.Project
-import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
 import org.gradle.api.plugins.BasePluginConvention
 import org.gradle.api.tasks.*
@@ -29,9 +28,14 @@ import org.jetbrains.kotlin.gradle.internal.prepareCompilerArguments
 import org.jetbrains.kotlin.gradle.internal.tasks.TaskWithLocalState
 import org.jetbrains.kotlin.gradle.internal.tasks.allOutputFiles
 import org.jetbrains.kotlin.gradle.logging.*
-import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.COMPILER_CLASSPATH_CONFIGURATION_NAME
+import org.jetbrains.kotlin.gradle.plugin.KotlinMultiplatformPluginWrapper
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformPluginBase
+import org.jetbrains.kotlin.gradle.plugin.PLUGIN_CLASSPATH_CONFIGURATION_NAME
 import org.jetbrains.kotlin.gradle.report.BuildReportMode
-import org.jetbrains.kotlin.gradle.utils.*
+import org.jetbrains.kotlin.gradle.utils.isParentOf
+import org.jetbrains.kotlin.gradle.utils.pathsAsStringRelativeTo
+import org.jetbrains.kotlin.gradle.utils.toSortedPathsArray
 import org.jetbrains.kotlin.incremental.ChangedFiles
 import org.jetbrains.kotlin.incremental.classpathAsList
 import org.jetbrains.kotlin.incremental.destinationAsFile
@@ -141,7 +145,7 @@ abstract class AbstractKotlinCompile<T : CommonCompilerArguments>() : AbstractKo
         get() = File(taskBuildDirectory, "build-history.bin")
 
     @get:Input
-    internal var useModuleDetection: Boolean = false
+    internal open var useModuleDetection: Boolean = false
 
     @get:Internal
     protected val multiModuleICSettings: MultiModuleICSettings
@@ -393,13 +397,6 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
         args.apply { fillDefaultValues() }
         super.setupCompilerArgs(args, defaultsOnly)
 
-        args.addCompilerBuiltIns = true
-
-        val gradleVersion = getGradleVersion()
-        if (gradleVersion == null || gradleVersion >= ParsedGradleVersion(3, 2)) {
-            args.loadBuiltInsFromDependencies = true
-        }
-
         args.moduleName = friendTask?.moduleName ?: moduleName
         logger.kotlinDebug { "args.moduleName = ${args.moduleName}" }
 
@@ -408,6 +405,7 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
 
         if (defaultsOnly) return
 
+        args.allowNoSourceFiles = true
         args.classpathAsList = compileClasspath.toList()
         args.destinationAsFile = destinationDir
         parentKotlinOptionsImpl?.updateArguments(args)
@@ -433,7 +431,8 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
                 taskBuildDirectory,
                 usePreciseJavaTracking = usePreciseJavaTracking,
                 disableMultiModuleIC = disableMultiModuleIC(),
-                multiModuleICSettings = multiModuleICSettings
+                multiModuleICSettings = multiModuleICSettings,
+                classpathFqNamesHistory = getClasspathFqNamesHistoryDir()
             )
         } else null
 
@@ -441,7 +440,8 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
             computedCompilerClasspath, messageCollector, outputItemCollector,
             outputFiles = allOutputFiles(),
             buildReportMode = buildReportMode,
-            incrementalCompilationEnvironment = icEnv
+            incrementalCompilationEnvironment = icEnv,
+            kotlinScriptExtensions = sourceFilesExtensions.toTypedArray()
         )
         compilerRunner.runJvmCompilerAsync(
             sourceRoots.kotlinSourceFiles,
@@ -474,6 +474,10 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
 
         return false
     }
+
+    @Optional
+    @Internal
+    internal open fun getClasspathFqNamesHistoryDir(): File? = null
 
     // override setSource to track source directory sets and files (for generated android folders)
     override fun setSource(sources: Any?) {
@@ -609,13 +613,3 @@ private val invalidModuleNameCharactersRegex = """[\\/\r\n\t]""".toRegex()
 
 private fun filterModuleName(moduleName: String): String =
     moduleName.replace(invalidModuleNameCharactersRegex, "_")
-
-private fun Task.getGradleVersion(): ParsedGradleVersion? {
-    val gradleVersion = project.gradle.gradleVersion
-    val result = ParsedGradleVersion.parse(gradleVersion)
-    if (result == null) {
-        logger.kotlinDebug("Could not parse gradle version: $gradleVersion")
-    }
-    return result
-}
-

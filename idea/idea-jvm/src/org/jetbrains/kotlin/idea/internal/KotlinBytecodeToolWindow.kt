@@ -22,7 +22,9 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.util.Alarm
 import org.jetbrains.kotlin.analyzer.common.CommonPlatform
+import org.jetbrains.kotlin.backend.common.phaser.PhaseConfig
 import org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory
+import org.jetbrains.kotlin.backend.jvm.jvmPhases
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.codegen.ClassBuilderFactories
 import org.jetbrains.kotlin.codegen.CompilationErrorHandler
@@ -38,6 +40,7 @@ import org.jetbrains.kotlin.idea.util.InfinitePeriodicalTask
 import org.jetbrains.kotlin.idea.util.LongRunningReadTask
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtCodeFragment
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
@@ -306,6 +309,8 @@ class KotlinBytecodeToolWindow(private val myProject: Project, private val toolW
                 override fun shouldGenerateScript(script: KtScript): Boolean {
                     return script.containingKtFile === ktFile
                 }
+
+                override fun shouldGenerateCodeFragment(script: KtCodeFragment) = false
             }
 
             val state = GenerationState.Builder(
@@ -315,7 +320,7 @@ class KotlinBytecodeToolWindow(private val myProject: Project, private val toolW
                 .generateDeclaredClassFilter(generateClassFilter)
                 .codegenFactory(
                     if (configuration.getBoolean(JVMConfigurationKeys.IR))
-                        JvmIrCodegenFactory
+                        JvmIrCodegenFactory(PhaseConfig(jvmPhases))
                     else
                         DefaultCodegenFactory
                 )

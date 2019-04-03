@@ -39,16 +39,14 @@ import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
+import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesManager
 import org.jetbrains.kotlin.idea.debugger.DebuggerUtils
 import org.jetbrains.kotlin.idea.refactoring.getLineNumber
 import org.jetbrains.kotlin.idea.scratch.*
 import org.jetbrains.kotlin.idea.scratch.output.ScratchOutput
 import org.jetbrains.kotlin.idea.scratch.output.ScratchOutputType
 import org.jetbrains.kotlin.idea.util.application.runReadAction
-import org.jetbrains.kotlin.psi.KtClassOrObject
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtPsiFactory
-import org.jetbrains.kotlin.psi.KtScript
+import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.getElementTextWithContext
 import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import java.io.File
@@ -60,15 +58,16 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
 
     private var backgroundProcessIndicator: ProgressIndicator? = null
 
+    private val expressions = file.getExpressions()
+
     override fun execute() {
         handler.onStart(file)
 
-        val module = file.getModule() ?: return errorOccurs("Module should be selected", isFatal = true)
         val psiFile = file.getPsiFile() as? KtFile ?: return errorOccurs("Couldn't find KtFile for current editor", isFatal = true)
 
         if (!checkForErrors(psiFile)) return
 
-        val result = runReadAction { KtScratchSourceFileProcessor().process(file) }
+        val result = runReadAction { KtScratchSourceFileProcessor().process(expressions) }
         when (result) {
             is KtScratchSourceFileProcessor.Result.Error -> return errorOccurs(result.message, isFatal = true)
             is KtScratchSourceFileProcessor.Result.OK -> {
@@ -90,7 +89,7 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                             ) ?: return
 
                             try {
-                                val commandLine = createCommandLine(module, result.mainClassName, tempDir.path)
+                                val commandLine = createCommandLine(psiFile, file.getModule(), result.mainClassName, tempDir.path)
 
                                 LOG.printDebugMessage(commandLine.commandLineString)
 
@@ -142,6 +141,7 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
             override fun shouldAnnotateClass(processingClassOrObject: KtClassOrObject) = true
             override fun shouldGenerateClass(processingClassOrObject: KtClassOrObject) = processingClassOrObject.containingKtFile == psiFile
             override fun shouldGenerateScript(script: KtScript) = false
+            override fun shouldGenerateCodeFragment(script: KtCodeFragment) = false
         }
 
         val state = GenerationState.Builder(
@@ -176,16 +176,22 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
         return dir
     }
 
-    private fun createCommandLine(module: Module, mainClassName: String, tempOutDir: String): GeneralCommandLine {
+    private fun createCommandLine(originalFile: KtFile, module: Module?, mainClassName: String, tempOutDir: String): GeneralCommandLine {
         val javaParameters = KotlinConsoleKeeper.createJavaParametersWithSdk(module)
         javaParameters.mainClass = mainClassName
 
-        val compiledModulePath = CompilerPathsEx.getOutputPaths(arrayOf(module)).toList()
-        val moduleDependencies = OrderEnumerator.orderEntries(module).recursively().pathsList.pathList
-
         javaParameters.classPath.add(tempOutDir)
-        javaParameters.classPath.addAll(compiledModulePath)
-        javaParameters.classPath.addAll(moduleDependencies)
+
+        if (module != null) {
+            val compiledModulePath = CompilerPathsEx.getOutputPaths(arrayOf(module)).toList()
+            javaParameters.classPath.addAll(compiledModulePath)
+
+            val moduleDependencies = OrderEnumerator.orderEntries(module).recursively().pathsList.pathList
+            javaParameters.classPath.addAll(moduleDependencies)
+        }
+
+        val scriptDependencies = ScriptDependenciesManager.getInstance(originalFile.project).getScriptDependencies(originalFile.virtualFile)
+        javaParameters.classPath.addAll(scriptDependencies.classpath.map { it.absolutePath })
 
         return javaParameters.toCommandLine()
     }
@@ -214,7 +220,7 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                     val errorText = DefaultErrorMessages.render(diagnostic)
                     if (psiFile == scratchPsiFile) {
                         if (diagnostic.psiElement.containingFile == psiFile) {
-                            val scratchExpression = file.findExpression(diagnostic.psiElement)
+                            val scratchExpression = expressions.findExpression(diagnostic.psiElement)
                             if (scratchExpression == null) {
                                 LOG.error("Couldn't find expression to report error: ${diagnostic.psiElement.getElementTextWithContext()}")
                                 handler.error(file, errorText)
@@ -236,13 +242,13 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
         }
     }
 
-    private fun ScratchFile.findExpression(psiElement: PsiElement): ScratchExpression? {
+    private fun List<ScratchExpression>.findExpression(psiElement: PsiElement): ScratchExpression? {
         val elementLine = psiElement.getLineNumber()
-        return runReadAction { getExpressions().firstOrNull { elementLine in it.lineStart..it.lineEnd } }
+        return runReadAction { firstOrNull { elementLine in it.lineStart..it.lineEnd } }
     }
 
-    private fun ScratchFile.findExpression(lineStart: Int, lineEnd: Int): ScratchExpression? {
-        return runReadAction { getExpressions().firstOrNull { it.lineStart == lineStart && it.lineEnd == lineEnd } }
+    private fun List<ScratchExpression>.findExpression(lineStart: Int, lineEnd: Int): ScratchExpression? {
+        return runReadAction { firstOrNull { it.lineStart == lineStart && it.lineEnd == lineEnd } }
     }
 
     private inner class ProcessOutputParser {
@@ -273,11 +279,11 @@ class KtCompilingExecutor(file: ScratchFile) : ScratchExecutor(file) {
                         val extractedLineInfo = extractLineInfoFrom(lineWoPrefix)
                             ?: return errorOccurs("Couldn't extract line info from line: $lineWoPrefix", isFatal = true)
                         val (startLine, endLine) = extractedLineInfo
-                        val scratchExpression = file.findExpression(startLine, endLine)
+                        val scratchExpression = expressions.findExpression(startLine, endLine)
                         if (scratchExpression == null) {
                             LOG.error(
                                 "Couldn't find expression with start line = $startLine, end line = $endLine.\n" +
-                                        file.getExpressions().joinToString("\n")
+                                        expressions.joinToString("\n")
                             )
                         } else {
                             userOutput.forEach { output ->

@@ -24,6 +24,7 @@ internal const val KOTLIN_JAVA_SCRIPT_RUNTIME_JAR = "kotlin-script-runtime.jar"
 internal const val TROVE4J_JAR = "trove4j.jar"
 internal const val KOTLIN_SCRIPTING_COMPILER_JAR = "kotlin-scripting-compiler.jar"
 internal const val KOTLIN_SCRIPTING_COMPILER_EMBEDDABLE_JAR = "kotlin-scripting-compiler-embeddable.jar"
+internal const val KOTLIN_SCRIPTING_IMPL_JAR = "kotlin-scripting-impl.jar"
 internal const val KOTLIN_SCRIPTING_COMMON_JAR = "kotlin-scripting-common.jar"
 internal const val KOTLIN_SCRIPTING_JVM_JAR = "kotlin-scripting-jvm.jar"
 
@@ -43,7 +44,7 @@ internal const val KOTLIN_SCRIPT_RUNTIME_JAR_PROPERTY = "kotlin.script.runtime.j
 private val validClasspathFilesExtensions = setOf("jar", "zip", "java")
 
 fun classpathFromClassloader(classLoader: ClassLoader): List<File>? =
-    generateSequence(classLoader) { it.parent }.toList().flatMap {
+    allRelatedClassLoaders(classLoader).toList().flatMap {
         val urls = (it as? URLClassLoader)?.urLs?.asList()
             ?: try {
                 // e.g. for IDEA platform UrlClassLoader
@@ -88,6 +89,26 @@ fun File.hasParentNamed(baseName: String): Boolean =
     nameWithoutExtension == baseName || parentFile?.hasParentNamed(baseName) ?: false
 
 private const val KOTLIN_COMPILER_EMBEDDABLE_JAR = "$KOTLIN_COMPILER_NAME-embeddable.jar"
+
+private fun allRelatedClassLoaders(clsLoader: ClassLoader, visited: MutableSet<ClassLoader> = HashSet()): Sequence<ClassLoader> {
+    if (!visited.add(clsLoader)) return emptySequence()
+
+    val singleParent = clsLoader.parent
+    if (singleParent != null)
+        return sequenceOf(clsLoader) + sequenceOf(singleParent).flatMap { allRelatedClassLoaders(it, visited) }
+
+    return try {
+        val field = clsLoader.javaClass.getDeclaredField("myParents") // com.intellij.ide.plugins.cl.PluginClassLoader
+        field.isAccessible = true
+
+        @Suppress("UNCHECKED_CAST")
+        val arrayOfClassLoaders = field.get(clsLoader) as Array<ClassLoader>
+        sequenceOf(clsLoader) + arrayOfClassLoaders.asSequence().flatMap { allRelatedClassLoaders(it, visited) }
+    } catch (e: Throwable) {
+        sequenceOf(clsLoader)
+    }
+}
+
 
 internal fun List<File>.takeIfContainsAll(vararg keyNames: String): List<File>? =
         takeIf { classpath ->
@@ -182,6 +203,7 @@ object KotlinJars {
         )
         val kotlinScriptingJars = if (withScripting) listOf(
             KOTLIN_SCRIPTING_COMPILER_JAR,
+            KOTLIN_SCRIPTING_IMPL_JAR,
             KOTLIN_SCRIPTING_COMPILER_EMBEDDABLE_JAR,
             KOTLIN_SCRIPTING_COMMON_JAR,
             KOTLIN_SCRIPTING_JVM_JAR

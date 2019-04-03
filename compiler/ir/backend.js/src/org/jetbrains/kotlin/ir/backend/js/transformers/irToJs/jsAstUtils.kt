@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 
 import org.jetbrains.kotlin.backend.common.descriptors.isSuspend
+import org.jetbrains.kotlin.backend.common.ir.isElseBranch
 import org.jetbrains.kotlin.ir.backend.js.utils.JsGenerationContext
 import org.jetbrains.kotlin.ir.backend.js.utils.Namer
 import org.jetbrains.kotlin.ir.declarations.IrFunction
@@ -24,7 +25,7 @@ fun <T : JsNode, D : JsGenerationContext> IrWhen.toJsNode(
 ): T? =
     branches.foldRight<IrBranch, T?>(null) { br, n ->
         val body = br.result.accept(tr, data)
-        if (br is IrElseBranch) body
+        if (isElseBranch(br)) body
         else {
             val condition = br.condition.accept(IrElementToJsExpressionTransformer(), data)
             node(condition, body, n)
@@ -87,6 +88,19 @@ fun defineProperty(receiver: JsExpression, name: String, value: () -> JsExpressi
     val objectDefineProperty = JsNameRef("defineProperty", Namer.JS_OBJECT)
     return JsInvocation(objectDefineProperty, receiver, JsStringLiteral(name), value())
 }
+
+
+fun defineProperty(receiver: JsExpression, name: String, getter: JsExpression?, setter: JsExpression? = null) =
+    defineProperty(receiver, name) {
+        val literal = JsObjectLiteral(true)
+        literal.apply {
+            if (getter != null)
+                propertyInitializers += JsPropertyInitializer(JsStringLiteral("get"), getter)
+            if (setter != null)
+                propertyInitializers += JsPropertyInitializer(JsStringLiteral("set"), setter)
+        }
+    }
+
 
 // Partially copied from org.jetbrains.kotlin.js.translate.utils.JsAstUtils
 object JsAstUtils {

@@ -41,7 +41,10 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.metadata.K2MetadataCompiler
 import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.daemon.common.*
-import org.jetbrains.kotlin.daemon.report.*
+import org.jetbrains.kotlin.daemon.report.CompileServicesFacadeMessageCollector
+import org.jetbrains.kotlin.daemon.report.DaemonMessageReporter
+import org.jetbrains.kotlin.daemon.report.DaemonMessageReporterPrintStreamAdapter
+import org.jetbrains.kotlin.daemon.report.getICReporter
 import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
@@ -451,7 +454,7 @@ class CompileServiceImpl(
                                 doCompile(sessionId, daemonReporter, tracer = null) { _, _ ->
                                     execIncrementalCompiler(
                                         k2jvmArgs, gradleIncrementalArgs, gradleIncrementalServicesFacade, compilationResults!!,
-                                        messageCollector, daemonReporter
+                                        messageCollector
                                     )
                                 }
                             }
@@ -527,39 +530,22 @@ class CompileServiceImpl(
         incrementalCompilationOptions: IncrementalCompilationOptions,
         servicesFacade: IncrementalCompilerServicesFacade,
         compilationResults: CompilationResults,
-        compilerMessageCollector: MessageCollector,
-        daemonMessageReporter: DaemonMessageReporter
+        compilerMessageCollector: MessageCollector
     ): ExitCode {
-        val moduleFile = k2jvmArgs.buildFile?.let(::File)
-        assert(moduleFile?.exists() ?: false) { "Module does not exist ${k2jvmArgs.buildFile}" }
-
-        // todo: pass javaSourceRoots and allKotlinFiles using IncrementalCompilationOptions
-        val parsedModule = run {
-            val bytesOut = ByteArrayOutputStream()
-            val printStream = PrintStream(bytesOut)
-            val mc = PrintingMessageCollector(printStream, MessageRenderer.PLAIN_FULL_PATHS, false)
-            val parsedModule = ModuleXmlParser.parseModuleScript(k2jvmArgs.buildFile!!, mc)
-            if (mc.hasErrors()) {
-                daemonMessageReporter.report(ReportSeverity.ERROR, bytesOut.toString("UTF8"))
+        val allKotlinExtensions = (DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS +
+                (incrementalCompilationOptions.kotlinScriptExtensions ?: emptyArray())).distinct()
+        val dotExtensions = allKotlinExtensions.map { ".$it" }
+        val freeArgs = arrayListOf<String>()
+        val allKotlinFiles = arrayListOf<File>()
+        for (arg in k2jvmArgs.freeArgs) {
+            val file = File(arg)
+            if (file.isFile && dotExtensions.any { ext -> file.path.endsWith(ext, ignoreCase = true) }) {
+                allKotlinFiles.add(file)
+            } else {
+                freeArgs.add(arg)
             }
-            parsedModule
         }
-
-        val javaSourceRoots = parsedModule.modules.flatMapTo(HashSet()) {
-            it.getJavaSourceRoots().map { JvmSourceRoot(File(it.path), it.packagePrefix) }
-        }
-
-        k2jvmArgs.commonSources = parsedModule.modules.flatMap { it.getCommonSourceFiles() }.toTypedArray().takeUnless { it.isEmpty() }
-
-        val allKotlinFiles = parsedModule.modules.flatMap { it.getSourceFiles().map(::File) }
-        val allKotlinExtensions = (
-                DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS +
-                        allKotlinFiles.asSequence()
-                            .map { it.extension }
-                            .filter { !it.equals("java", ignoreCase = true) }
-                            .asIterable()
-                ).distinct()
-        k2jvmArgs.friendPaths = parsedModule.modules.flatMap(Module::getFriendPaths).toTypedArray()
+        k2jvmArgs.freeArgs = freeArgs
 
         val changedFiles = if (incrementalCompilationOptions.areFileChangesKnown) {
             ChangedFiles.Known(incrementalCompilationOptions.modifiedFiles!!, incrementalCompilationOptions.deletedFiles!!)
@@ -580,15 +566,18 @@ class CompileServiceImpl(
             }
         }
 
+        val outputFiles = incrementalCompilationOptions.outputFiles.toMutableList()
+        incrementalCompilationOptions.classpathFqNamesHistory?.let { outputFiles.add(it) }
+
         val compiler = IncrementalJvmCompilerRunner(
             workingDir,
-            javaSourceRoots,
             reporter,
             buildHistoryFile = incrementalCompilationOptions.multiModuleICSettings.buildHistoryFile,
-            outputFiles = incrementalCompilationOptions.outputFiles,
+            outputFiles = outputFiles,
             usePreciseJavaTracking = incrementalCompilationOptions.usePreciseJavaTracking,
             modulesApiHistory = modulesApiHistory,
-            kotlinSourceFilesExtensions = allKotlinExtensions
+            kotlinSourceFilesExtensions = allKotlinExtensions,
+            classpathFqNamesHistory = incrementalCompilationOptions.classpathFqNamesHistory
         )
         return try {
             compiler.compile(allKotlinFiles, k2jvmArgs, compilerMessageCollector, changedFiles)

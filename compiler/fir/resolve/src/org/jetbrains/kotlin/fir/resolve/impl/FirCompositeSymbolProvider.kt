@@ -6,18 +6,41 @@
 package org.jetbrains.kotlin.fir.resolve.impl
 
 import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
-import org.jetbrains.kotlin.fir.symbols.ConeSymbol
+import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
+import org.jetbrains.kotlin.fir.symbols.ConeClassLikeSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 class FirCompositeSymbolProvider(val providers: List<FirSymbolProvider>) : FirSymbolProvider {
+    override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<ConeCallableSymbol> {
+        return providers.flatMap { it.getTopLevelCallableSymbols(packageFqName, name) }
+    }
+
+    override fun getClassDeclaredMemberScope(classId: ClassId) = providers.firstNotNullResult { it.getClassDeclaredMemberScope(classId) }
 
     override fun getPackage(fqName: FqName): FqName? {
         return providers.firstNotNullResult { it.getPackage(fqName) }
     }
 
-    override fun getSymbolByFqName(classId: ClassId): ConeSymbol? {
-        return providers.firstNotNullResult { it.getSymbolByFqName(classId) }
+    override fun getClassLikeSymbolByFqName(classId: ClassId): ConeClassLikeSymbol? {
+        return providers.firstNotNullResult { it.getClassLikeSymbolByFqName(classId) }
+    }
+
+    override fun getAllCallableNamesInPackage(fqName: FqName): Set<Name> {
+        return providers.flatMapTo(mutableSetOf()) { it.getAllCallableNamesInPackage(fqName) }
+    }
+
+    override fun getClassNamesInPackage(fqName: FqName): Set<Name> {
+        return providers.flatMapTo(mutableSetOf()) { it.getClassNamesInPackage(fqName) }
+    }
+
+    override fun getAllCallableNamesInClass(classId: ClassId): Set<Name> {
+        return providers.flatMapTo(mutableSetOf()) { it.getAllCallableNamesInClass(classId) }
+    }
+
+    override fun getNestedClassesNamesInClass(classId: ClassId): Set<Name> {
+        return providers.flatMapTo(mutableSetOf()) { it.getNestedClassesNamesInClass(classId) }
     }
 }

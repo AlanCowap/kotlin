@@ -28,7 +28,8 @@ open class CompilationOptions(
         /** @See [ReportSeverity] */
         val reportSeverity: Int,
         /** @See [CompilationResultCategory]] */
-        val requestedCompilationResults: Array<Int>
+        val requestedCompilationResults: Array<Int>,
+        val kotlinScriptExtensions: Array<String>? = null
 ) : Serializable {
     companion object {
         const val serialVersionUID: Long = 0
@@ -41,6 +42,7 @@ open class CompilationOptions(
                "reportCategories=${Arrays.toString(reportCategories)}, " +
                "reportSeverity=$reportSeverity, " +
                "requestedCompilationResults=${Arrays.toString(requestedCompilationResults)}" +
+               "kotlinScriptExtensions=${Arrays.toString(kotlinScriptExtensions)}" +
                ")"
     }
 }
@@ -64,8 +66,17 @@ class IncrementalCompilationOptions(
          */
         val outputFiles: List<File>,
     val multiModuleICSettings: MultiModuleICSettings,
-    val modulesInfo: IncrementalModuleInfo
-) : CompilationOptions(compilerMode, targetPlatform, reportCategories, reportSeverity, requestedCompilationResults) {
+    val modulesInfo: IncrementalModuleInfo,
+    val classpathFqNamesHistory: File? = null,
+    kotlinScriptExtensions: Array<String>? = null
+) : CompilationOptions(
+    compilerMode,
+    targetPlatform,
+    reportCategories,
+    reportSeverity,
+    requestedCompilationResults,
+    kotlinScriptExtensions
+) {
     companion object {
         const val serialVersionUID: Long = 0
     }
@@ -80,6 +91,7 @@ class IncrementalCompilationOptions(
                "multiModuleICSettings=$multiModuleICSettings, " +
                "usePreciseJavaTracking=$usePreciseJavaTracking" +
                "outputFiles=$outputFiles" +
+               "classpathFqNamesHistory=$classpathFqNamesHistory" +
                ")"
     }
 }

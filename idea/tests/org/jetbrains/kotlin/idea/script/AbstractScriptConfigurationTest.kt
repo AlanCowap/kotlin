@@ -181,7 +181,7 @@ abstract class AbstractScriptConfigurationTest : KotlinCompletionTestCase() {
         }
 
         if (configureConflictingModule in environment) {
-            val sharedLib = LocalFileSystem.getInstance().findFileByIoFile(environment["lib-classes"] as File)!!
+            val sharedLib = VfsUtil.findFileByIoFile(environment["lib-classes"] as File, true)!!
             if (module == null) {
                 myModule = createTestModuleByName("mainModule")
             }
@@ -221,7 +221,12 @@ abstract class AbstractScriptConfigurationTest : KotlinCompletionTestCase() {
 
     private fun createTestModuleByName(name: String): Module {
         val newModuleDir = runWriteAction { VfsUtil.createDirectoryIfMissing(project.baseDir, name) }
-        val newModule = createModuleAt(name, project, JavaModuleType.getModuleType(), newModuleDir.path)
+
+        // BUNCH: 181
+        @Suppress("IncompatibleAPI") val newModule = createModuleAt(name, project, JavaModuleType.getModuleType(), newModuleDir.path)
+
+        // Return type was changed, but it's not used. BUNCH: 183
+        @Suppress("MissingRecentApi")
         PsiTestUtil.addSourceContentToRoots(newModule, newModuleDir)
         return newModule
     }
@@ -326,7 +331,8 @@ abstract class AbstractScriptConfigurationTest : KotlinCompletionTestCase() {
     }
 
     private fun compileLibToDir(srcDir: File, vararg classpath: String): File {
-        val outDir = KotlinTestUtils.tmpDir("${getTestName(false)}${srcDir.name}Out")
+        //TODO: tmpDir would be enough, but there is tricky fail under AS otherwise
+        val outDir = KotlinTestUtils.tmpDirForReusableLibrary("${getTestName(false)}${srcDir.name}Out")
 
         val kotlinSourceFiles = FileUtil.findFilesByMask(Pattern.compile(".+\\.kt$"), srcDir)
         if (kotlinSourceFiles.isNotEmpty()) {

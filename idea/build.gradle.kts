@@ -1,5 +1,3 @@
-import org.gradle.jvm.tasks.Jar
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
@@ -11,6 +9,7 @@ repositories {
 
 dependencies {
     testRuntime(intellijDep())
+    testRuntime(intellijRuntimeAnnotations())
 
     compile(kotlinStdlib("jdk8"))
     compileOnly(project(":kotlin-reflect-api"))
@@ -32,10 +31,12 @@ dependencies {
     compile(projectRuntimeJar(":kotlin-daemon-client"))
     compile(project(":kotlin-compiler-runner")) { isTransitive = false }
     compile(project(":compiler:plugin-api"))
-    compile(project(":eval4j"))
+    compile(project(":idea:eval4j"))
     compile(project(":j2k"))
     compile(project(":idea:formatter"))
     compile(project(":idea:fir-view"))
+    compile(project(":compiler:fir:resolve"))
+    compile(project(":compiler:fir:java"))
     compile(project(":idea:idea-core"))
     compile(project(":idea:ide-common"))
     compile(project(":idea:idea-jps-common"))
@@ -44,6 +45,7 @@ dependencies {
     compile(project(":plugins:uast-kotlin-idea"))
     compile(project(":kotlin-script-util")) { isTransitive = false }
     compile(project(":kotlin-scripting-intellij"))
+    compile(project(":compiler:backend.jvm")) // Do not delete, for Pill
 
     compile(commonDep("org.jetbrains.kotlinx", "kotlinx-coroutines-core")) { isTransitive = false }
 
@@ -87,13 +89,14 @@ dependencies {
     testRuntime(project(":kotlin-noarg-compiler-plugin"))
     testRuntime(project(":plugins:annotation-based-compiler-plugins-ide-support")) { isTransitive = false }
     testRuntime(project(":kotlin-scripting-idea")) { isTransitive = false }
-    testRuntime(project(":kotlin-scripting-compiler"))
+    testRuntime(project(":kotlin-scripting-impl"))
     testRuntime(project(":sam-with-receiver-ide-plugin")) { isTransitive = false }
     testRuntime(project(":kotlinx-serialization-compiler-plugin"))
     testRuntime(project(":kotlinx-serialization-ide-plugin")) { isTransitive = false }
     testRuntime(project(":idea:idea-android")) { isTransitive = false }
     testRuntime(project(":plugins:lint")) { isTransitive = false }
     testRuntime(project(":plugins:uast-kotlin"))
+    testRuntime(project(":nj2k:nj2k-services")) { isTransitive = false }
 
     (rootProject.extra["compilerModules"] as Array<String>).forEach {
         testRuntime(project(it))
@@ -122,7 +125,9 @@ dependencies {
     testRuntime(intellijPluginDep("smali"))
     testRuntime(intellijPluginDep("testng"))
 
-    if (System.getProperty("idea.active") != null) testRuntimeOnly(files("${rootProject.projectDir}/dist/kotlinc/lib/kotlin-reflect.jar"))
+    if (project.kotlinBuildProperties.isInJpsBuildIdeaSync) {
+        testRuntimeOnly(files("${rootProject.projectDir}/dist/kotlinc/lib/kotlin-reflect.jar"))
+    }
 }
 sourceSets {
     "main" {
@@ -205,6 +210,4 @@ projectTest(taskName = "performanceTest") {
 
 testsJar {}
 
-classesDirsArtifact()
 configureFormInstrumentation()
-

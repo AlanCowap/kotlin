@@ -5,9 +5,11 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.ConventionTask
 import org.gradle.api.tasks.*
+import org.gradle.api.tasks.incremental.IncrementalTaskInputs
 import org.jetbrains.kotlin.gradle.internal.tasks.TaskWithLocalState
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.cacheOnlyIfEnabledForKotlin
+import org.jetbrains.kotlin.gradle.tasks.clearLocalState
 import org.jetbrains.kotlin.gradle.tasks.isBuildCacheSupported
 import org.jetbrains.kotlin.gradle.utils.isJavaFile
 import java.io.File
@@ -19,8 +21,7 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
         cacheOnlyIfEnabledForKotlin()
 
         if (isBuildCacheSupported()) {
-            val reason = "Caching is disabled by default for kapt because of arbitrary behavior of external " +
-                    "annotation processors. You can enable it by adding 'kapt.useBuildCache = true' to the build script."
+            val reason = "Caching is disabled for kapt with 'kapt.useBuildCache'"
             outputs.cacheIf(reason) { useBuildCache }
         }
     }
@@ -46,6 +47,11 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
     @get:Internal
     internal lateinit var kaptClasspathConfigurations: List<Configuration>
 
+    /** Output directory that contains caches necessary to support incremental annotation processing. */
+    @get:OutputDirectory
+    @get:Optional
+    var incAptCache: File? = null
+
     @get:OutputDirectory
     internal lateinit var classesDir: File
 
@@ -60,6 +66,12 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
 
     @get:Input
     internal var includeCompileClasspath: Boolean = true
+
+    @get:InputFiles
+    internal var classpathDirtyFqNamesHistoryDir: FileCollection = project.files()
+
+    @get:Input
+    internal var isIncremental = true
 
     // @Internal because _abiClasspath and _nonAbiClasspath are used for actual checks
     @get:Internal
@@ -140,6 +152,23 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
                 )
             }
 
+        }
+    }
+
+    // TODO(gavra): Here we assume that kotlinc and javac output is available for incremental runs. We should insert some checks.
+    @Internal
+    protected fun getCompiledSources() = listOfNotNull(kotlinCompileTask.destinationDir, kotlinCompileTask.javaOutputDir)
+
+    protected fun getChangedFiles(inputs: IncrementalTaskInputs): List<File> {
+        return if (!isIncremental || !inputs.isIncremental || !getCompiledSources().all { it.exists() }) {
+            clearLocalState()
+            emptyList()
+        } else {
+            with(mutableSetOf<File>()) {
+                inputs.outOfDate { this.add(it.file) }
+                inputs.removed { this.add(it.file) }
+                return@with this.toList()
+            }
         }
     }
 

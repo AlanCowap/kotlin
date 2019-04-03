@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
 import org.jetbrains.kotlin.gradle.plugin.LanguageSettingsBuilder
+import org.jetbrains.kotlin.gradle.plugin.cocoapods.asValidFrameworkName
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.jetbrains.kotlin.konan.target.CompilerOutputKind
 import org.jetbrains.kotlin.konan.target.CompilerOutputKind.*
@@ -57,12 +58,6 @@ internal fun MutableList<String>.addFileArgs(parameter: String, values: FileColl
 internal fun MutableList<String>.addFileArgs(parameter: String, values: Collection<FileCollection>) {
     values.forEach {
         addFileArgs(parameter, it)
-    }
-}
-
-internal fun MutableList<String>.addListArg(parameter: String, values: List<String>) {
-    if (values.isNotEmpty()) {
-        addArg(parameter, values.joinToString(separator = " "))
     }
 }
 
@@ -202,9 +197,14 @@ abstract class AbstractKotlinNativeCompile : AbstractCompile(), KotlinCompile<Ko
 
         val prefix = outputKind.prefix(konanTarget)
         val suffix = outputKind.suffix(konanTarget)
-        var filename = "$prefix$baseName$suffix"
-        if (outputKind in listOf(FRAMEWORK, STATIC, DYNAMIC) || outputKind == PROGRAM && konanTarget == KonanTarget.WASM32) {
-            filename = filename.replace('-', '_')
+        val filename = "$prefix$baseName$suffix".let {
+            when {
+                outputKind == FRAMEWORK ->
+                    it.asValidFrameworkName()
+                outputKind in listOf(STATIC, DYNAMIC) || outputKind == PROGRAM && konanTarget == KonanTarget.WASM32 ->
+                    it.replace('-', '_')
+                else -> it
+            }
         }
 
         destinationDir.resolve(filename)
@@ -371,6 +371,10 @@ open class KotlinNativeLink : AbstractKotlinNativeCompile() {
         }
 
     @get:Input
+    val isStaticFramework: Boolean
+        get() = binary.let { it is Framework && it.isStatic }
+
+    @get:Input
     val embedBitcode: Framework.BitcodeEmbeddingMode
         get() = (binary as? Framework)?.embedBitcode ?: Framework.BitcodeEmbeddingMode.DISABLE
 
@@ -388,10 +392,13 @@ open class KotlinNativeLink : AbstractKotlinNativeCompile() {
                 Framework.BitcodeEmbeddingMode.BITCODE -> add("-Xembed-bitcode")
                 else -> { /* Do nothing. */ }
             }
-            addListArg("-linker-options", linkerOpts)
+            linkerOpts.forEach {
+                addArg("-linker-option", it)
+            }
             exportLibraries.files.filterExternalKlibs(project).forEach {
                 add("-Xexport-library=${it.absolutePath}")
             }
+            addKey("-Xstatic-framework", isStaticFramework)
             addAll(freeCompilerArgs)
         }
     }
@@ -507,21 +514,21 @@ open class CInteropProcess : DefaultTask() {
             addArgIfNotNull("-def", defFile.canonicalPath)
             addArgIfNotNull("-pkg", packageName)
 
-            addFileArgs("-h", headers)
+            addFileArgs("-header", headers)
 
             compilerOpts.forEach {
-                addArg("-copt", it)
+                addArg("-compilerOpt", it)
             }
 
             linkerOpts.forEach {
-                addArg("-lopt", it)
+                addArg("-linkerOpt", it)
             }
 
             libraries.files.filterExternalKlibs(project).forEach { library ->
-                addArg("-l", library.absolutePath)
+                addArg("-library", library.absolutePath)
             }
 
-            addArgs("-copt", allHeadersDirs.map { "-I${it.absolutePath}" })
+            addArgs("-compilerOpt", allHeadersDirs.map { "-I${it.absolutePath}" })
             addArgs("-headerFilterAdditionalSearchPrefix", headerFilterDirs.map { it.absolutePath })
 
             addAll(extraOpts)

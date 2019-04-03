@@ -42,8 +42,8 @@ import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.KotlinScriptDefinitionFromAnnotatedTemplate
 import org.jetbrains.kotlin.script.ScriptDefinitionProvider
 import org.jetbrains.kotlin.script.ScriptTemplatesProvider
-import org.jetbrains.kotlin.scripting.compiler.plugin.KotlinScriptDefinitionAdapterFromNewAPI
-import org.jetbrains.kotlin.scripting.legacy.LazyScriptDefinitionProvider
+import org.jetbrains.kotlin.scripting.shared.definitions.KotlinScriptDefinitionAdapterFromNewAPI
+import org.jetbrains.kotlin.scripting.shared.definitions.LazyScriptDefinitionProvider
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.flattenTo
@@ -69,11 +69,14 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     private var definitionsByContributor = mutableMapOf<ScriptDefinitionContributor, List<KotlinScriptDefinition>>()
     private var definitions: List<KotlinScriptDefinition>? = null
 
+    private val failedContributorsHashes = HashSet<Int>()
+
     private val scriptDefinitionsCacheLock = ReentrantReadWriteLock()
     private val scriptDefinitionsCache = SLRUMap<String, KotlinScriptDefinition>(10, 10)
 
     override fun findScriptDefinition(fileName: String): KotlinScriptDefinition? {
         if (nonScriptFileName(fileName)) return null
+        if (!isReady()) return null
 
         val cached = synchronized(scriptDefinitionsCacheLock) { scriptDefinitionsCache.get(fileName) }
         if (cached != null) return cached
@@ -144,6 +147,12 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         }
     }
 
+    fun isReady(): Boolean {
+        return definitionsByContributor.keys.all { contributor ->
+            contributor.isReady()
+        }
+    }
+
     override fun getDefaultScriptDefinition(): KotlinScriptDefinition {
         val standardScriptDefinitionContributor = ScriptDefinitionContributor.find<StandardScriptDefinitionContributor>(project)
             ?: error("StandardScriptDefinitionContributor should be registered is plugin.xml")
@@ -188,13 +197,14 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     }
 
     private fun ScriptDefinitionContributor.safeGetDefinitions(): List<KotlinScriptDefinition> {
-        return try {
-            getDefinitions()
+        if (!failedContributorsHashes.contains(this@safeGetDefinitions.hashCode())) try {
+            return getDefinitions()
         } catch (t: Throwable) {
-            // TODO: review exception handling
-            // possibly log, see KT-19276
-            emptyList()
+            // reporting failed loading only once
+            LOG.error("[kts] cannot load script definitions using $this", t)
+            failedContributorsHashes.add(this@safeGetDefinitions.hashCode())
         }
+        return emptyList()
     }
 
     companion object {
@@ -271,6 +281,7 @@ interface ScriptDefinitionContributor {
     val id: String
 
     fun getDefinitions(): List<KotlinScriptDefinition>
+    fun isReady() = true
 
     companion object {
         val EP_NAME: ExtensionPointName<ScriptDefinitionContributor> =

@@ -17,6 +17,8 @@ import org.jetbrains.kotlin.ir.symbols.impl.IrTypeParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.impl.*
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
+import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
@@ -27,7 +29,7 @@ fun IrType.withHasQuestionMark(hasQuestionMark: Boolean): IrType =
                 this
             else
                 IrSimpleTypeImpl(
-                    makeKotlinType(classifier, arguments, hasQuestionMark),
+                    originalKotlinType?.run { if (hasQuestionMark) makeNullable() else makeNotNullable() },
                     classifier,
                     hasQuestionMark,
                     arguments,
@@ -42,23 +44,26 @@ val IrType.classifierOrFail: IrClassifierSymbol
 val IrType.classifierOrNull: IrClassifierSymbol?
     get() = safeAs<IrSimpleType>()?.classifier
 
-fun IrType.makeNotNull(addKotlinType:Boolean = true) =
-    if (this is IrSimpleType && this.hasQuestionMark)
+val IrType.classOrNull: IrClassSymbol?
+    get() = classifierOrNull as? IrClassSymbol
+
+fun IrType.makeNotNull() =
+    if (this is IrSimpleType && this.hasQuestionMark) {
         IrSimpleTypeImpl(
-            if (addKotlinType) makeKotlinType(classifier, arguments, false) else null,
+            originalKotlinType?.makeNotNullable(),
             classifier,
             false,
             arguments,
             annotations,
             Variance.INVARIANT
         )
-    else
+    } else
         this
 
-fun IrType.makeNullable(addKotlinType:Boolean = true) =
+fun IrType.makeNullable() =
     if (this is IrSimpleType && !this.hasQuestionMark)
         IrSimpleTypeImpl(
-            if (addKotlinType) makeKotlinType(classifier, arguments, true) else null,
+            originalKotlinType?.makeNullable(),
             classifier,
             true,
             arguments,
@@ -80,7 +85,7 @@ fun IrType.toKotlinType(): KotlinType {
 }
 
 fun IrType.getClass(): IrClass? =
-    (this.classifierOrNull as? IrClassSymbol)?.owner
+    classOrNull?.owner
 
 fun IrClassSymbol.createType(hasQuestionMark: Boolean, arguments: List<IrTypeArgument>): IrSimpleType =
     IrSimpleTypeImpl(
@@ -105,11 +110,6 @@ private fun makeKotlinType(
     return classifier.descriptor.defaultType.replace(newArguments = kotlinTypeArguments).makeNullableAsSpecified(hasQuestionMark)
 }
 
-fun ClassifierDescriptor.toIrType(hasQuestionMark: Boolean = false, symbolTable: SymbolTable? = null): IrType {
-    val symbol = getSymbol(symbolTable)
-    return IrSimpleTypeImpl(defaultType, symbol, hasQuestionMark, listOf(), listOf())
-}
-
 val IrTypeParameter.defaultType: IrType
     get() = IrSimpleTypeImpl(
         symbol,
@@ -131,7 +131,7 @@ fun IrClassifierSymbol.typeWith(arguments: List<IrType>): IrSimpleType =
 fun IrClass.typeWith(arguments: List<IrType>) = this.symbol.typeWith(arguments)
 
 fun KotlinType.toIrType(symbolTable: SymbolTable? = null): IrType? {
-    if (isDynamic()) return IrDynamicTypeImpl(this, listOf(), Variance.INVARIANT)
+    if (isDynamic()) return IrDynamicTypeImpl(null, listOf(), Variance.INVARIANT)
 
     val symbol = constructor.declarationDescriptor?.getSymbol(symbolTable) ?: return null
 
@@ -145,7 +145,7 @@ fun KotlinType.toIrType(symbolTable: SymbolTable? = null): IrType? {
 
     // TODO
     val annotations = listOf()
-    return IrSimpleTypeImpl(this, symbol, isMarkedNullable, arguments, annotations)
+    return IrSimpleTypeImpl(null, symbol, isMarkedNullable, arguments, annotations)
 }
 
 // TODO: this function creates unbound symbol which is the great source of problems

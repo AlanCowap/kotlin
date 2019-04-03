@@ -38,7 +38,7 @@ sourceSets {
     }
     coroutinesExperimentalMigrationTest {
         kotlin {
-            if(!System.properties.'idea.active') {
+            if(!BuildPropertiesKt.getKotlinBuildProperties(project).inIdeaSync) {
                 srcDir '../coroutines-experimental/jvm/test'
             }
         }
@@ -66,6 +66,8 @@ configurations {
     coroutinesExperimentalMigrationTestCompile.extendsFrom(coroutinesExperimentalTestCompile)
     longRunningTestCompile.extendsFrom(testCompile)
     builtins
+    compileOnly.extendsFrom(builtins)
+    coroutinesExperimentalCompile.extendsFrom(builtins)
 }
 
 dependencies {
@@ -88,7 +90,7 @@ jar {
     dependsOn(configurations.builtins)
     manifestAttributes(manifest, project, 'Main' /*true*/)
     from {
-        zipTree(configurations.builtins.asPath)
+        zipTree(configurations.builtins.singleFile)
     }
     from sourceSets.experimental.output
     from sourceSets.coroutinesExperimental.output
@@ -136,9 +138,10 @@ task modularJar(type: Jar) {
 
 artifacts {
     archives sourcesJar
-    archives javadocJar
     archives modularJar
 }
+
+javadocJar()
 
 dist {
     dependsOn distMavenSources
@@ -161,8 +164,6 @@ task dexMethodCount(type: DexMethodCount) {
 check.dependsOn(dexMethodCount)
 
 compileKotlin {
-    dependsOn(configurations.builtins)
-    classpath += configurations.builtins
     kotlinOptions {
         freeCompilerArgs = [
                 "-version",

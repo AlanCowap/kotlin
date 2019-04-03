@@ -170,8 +170,8 @@ object JavaToKotlinClassMap : PlatformToKotlinClassMap {
 
         val readOnlyFqName = readOnlyClassId.asSingleFqName()
         val mutableFqName = mutableClassId.asSingleFqName()
-        mutableToReadOnly.put(mutableClassId.asSingleFqName().toUnsafe(), readOnlyFqName)
-        readOnlyToMutable.put(readOnlyFqName.toUnsafe(), mutableFqName)
+        mutableToReadOnly[mutableClassId.asSingleFqName().toUnsafe()] = readOnlyFqName
+        readOnlyToMutable[readOnlyFqName.toUnsafe()] = mutableFqName
     }
 
     private fun add(javaClassId: ClassId, kotlinClassId: ClassId) {
@@ -188,11 +188,11 @@ object JavaToKotlinClassMap : PlatformToKotlinClassMap {
     }
 
     private fun addJavaToKotlin(javaClassId: ClassId, kotlinClassId: ClassId) {
-        javaToKotlin.put(javaClassId.asSingleFqName().toUnsafe(), kotlinClassId)
+        javaToKotlin[javaClassId.asSingleFqName().toUnsafe()] = kotlinClassId
     }
 
     private fun addKotlinToJava(kotlinFqNameUnsafe: FqName, javaClassId: ClassId) {
-        kotlinToJava.put(kotlinFqNameUnsafe.toUnsafe(), javaClassId)
+        kotlinToJava[kotlinFqNameUnsafe.toUnsafe()] = javaClassId
     }
 
     fun isJavaPlatformClass(fqName: FqName): Boolean = mapJavaToKotlin(fqName) != null
@@ -210,17 +210,25 @@ object JavaToKotlinClassMap : PlatformToKotlinClassMap {
         return if (className.isSafe)
             mapPlatformClass(className.toSafe(), classDescriptor.builtIns)
         else
-            emptySet<ClassDescriptor>()
+            emptySet()
     }
 
-    fun isMutable(mutable: ClassDescriptor): Boolean = mutableToReadOnly.containsKey(DescriptorUtils.getFqName(mutable))
+    fun mutableToReadOnly(fqNameUnsafe: FqNameUnsafe?): FqName? = mutableToReadOnly[fqNameUnsafe]
+
+    fun readOnlyToMutable(fqNameUnsafe: FqNameUnsafe?): FqName? = readOnlyToMutable[fqNameUnsafe]
+
+    fun isMutable(fqNameUnsafe: FqNameUnsafe?): Boolean = mutableToReadOnly.containsKey(fqNameUnsafe)
+
+    fun isMutable(mutable: ClassDescriptor): Boolean = isMutable(DescriptorUtils.getFqName(mutable))
 
     fun isMutable(type: KotlinType): Boolean {
         val classDescriptor = TypeUtils.getClassDescriptor(type)
         return classDescriptor != null && isMutable(classDescriptor)
     }
 
-    fun isReadOnly(readOnly: ClassDescriptor): Boolean = readOnlyToMutable.containsKey(DescriptorUtils.getFqName(readOnly))
+    fun isReadOnly(fqNameUnsafe: FqNameUnsafe?): Boolean = readOnlyToMutable.containsKey(fqNameUnsafe)
+
+    fun isReadOnly(readOnly: ClassDescriptor): Boolean = isReadOnly(DescriptorUtils.getFqName(readOnly))
 
     fun isReadOnly(type: KotlinType): Boolean {
         val classDescriptor = TypeUtils.getClassDescriptor(type)
@@ -236,7 +244,7 @@ object JavaToKotlinClassMap : PlatformToKotlinClassMap {
     }
 
     private fun classId(clazz: Class<*>): ClassId {
-        assert(!clazz.isPrimitive && !clazz.isArray) { "Invalid class: " + clazz }
+        assert(!clazz.isPrimitive && !clazz.isArray) { "Invalid class: $clazz" }
         val outer = clazz.declaringClass
         return if (outer == null)
             ClassId.topLevel(FqName(clazz.canonicalName))
@@ -250,7 +258,7 @@ object JavaToKotlinClassMap : PlatformToKotlinClassMap {
         mutabilityKindName: String
     ): ClassDescriptor {
         val oppositeClassFqName = map[DescriptorUtils.getFqName(descriptor)]
-                ?: throw IllegalArgumentException("Given class $descriptor is not a $mutabilityKindName collection")
+            ?: throw IllegalArgumentException("Given class $descriptor is not a $mutabilityKindName collection")
         return descriptor.builtIns.getBuiltInClassByFqName(oppositeClassFqName)
     }
 }

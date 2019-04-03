@@ -39,8 +39,13 @@ import java.util.*
 internal val fileClassPhase = makeIrFilePhase(
     ::FileClassLowering,
     name = "FileClass",
-    description = "Put file level function and property declaration into a class"
+    description = "Put file level function and property declaration into a class",
+    stickyPostconditions = setOf(::checkAllFileLevelDeclarationsAreClasses)
 )
+
+private fun checkAllFileLevelDeclarationsAreClasses(irFile: IrFile) {
+    assert(irFile.declarations.all { it is IrClass })
+}
 
 private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPass {
     override fun lower(irFile: IrFile) {
@@ -54,7 +59,7 @@ private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPa
                 fileClassMembers.add(it)
         }
 
-        if (fileClassMembers.isEmpty()) return
+        if (fileClassMembers.isEmpty() && irFile.metadata?.descriptors.isNullOrEmpty()) return
 
         val irFileClass = createFileClass(irFile, fileClassMembers)
         classes.add(irFileClass)
@@ -90,6 +95,7 @@ private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPa
             createImplicitParameterDeclarationWithWrappedDescriptor()
             // TODO: figure out why reparenting leads to failing tests.
             // fileClassMembers.forEach { it.parent = this }
+            metadata = irFile.metadata
 
             val partClassType = AsmUtil.asmTypeByFqNameWithoutInnerClasses(fileClassInfo.fileClassFqName)
             val facadeClassType =

@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.resolve.calls.components
 
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
@@ -29,6 +30,7 @@ interface KotlinResolutionStatelessCallbacks {
     fun getScopeTowerForCallableReferenceArgument(argument: CallableReferenceKotlinCallArgument): ImplicitScopeTower
     fun getVariableCandidateIfInvoke(functionCall: KotlinCall): KotlinResolutionCandidate?
     fun isCoroutineCall(argument: KotlinCallArgument, parameter: ValueParameterDescriptor): Boolean
+    fun isApplicableCallForBuilderInference(descriptor: CallableDescriptor, languageVersionSettings: LanguageVersionSettings): Boolean
 }
 
 // This components hold state (trace). Work with this carefully.
@@ -49,6 +51,8 @@ interface KotlinResolutionCallbacks {
     fun isCompileTimeConstant(resolvedAtom: ResolvedCallAtom, expectedType: UnwrappedType): Boolean
 
     val inferenceSession: InferenceSession
+
+    fun getExpectedTypeFromAsExpressionAndRecordItInTrace(resolvedAtom: ResolvedCallAtom): UnwrappedType?
 }
 
 interface SamConversionTransformer {

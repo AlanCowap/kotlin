@@ -56,7 +56,6 @@ abstract class AbstractIrTextTestCase : AbstractIrGeneratorTestCase() {
         val stubGenerator = DeclarationStubGenerator(
             irModule.descriptor,
             SymbolTable(), // TODO
-            IrDeclarationOrigin.IR_EXTERNAL_DECLARATION_STUB,
             myEnvironment.configuration.languageVersionSettings
         )
 
@@ -99,10 +98,6 @@ abstract class AbstractIrTextTestCase : AbstractIrGeneratorTestCase() {
             val copiedTrees = irFileCopy.dumpTreesFromLineNumber(irTreeFileLabel.lineNumber)
             TestCase.assertEquals("IR dump mismatch after deep copy with symbols", actualTrees, copiedTrees)
             verify(irFileCopy)
-
-            val irFileCopyOld = irFile.deepCopyOld()
-            val copiedTreesOld = irFileCopyOld.dumpTreesFromLineNumber(irTreeFileLabel.lineNumber)
-            TestCase.assertEquals("IR dump mismatch after old deep copy", actualTrees, copiedTreesOld)
         }
 
         try {
@@ -236,6 +231,15 @@ abstract class AbstractIrTextTestCase : AbstractIrGeneratorTestCase() {
         private fun IrSymbol.checkBinding(kind: String, irElement: IrElement) {
             if (!isBound) {
                 error("${javaClass.simpleName} $descriptor is unbound @$kind ${irElement.render()}")
+            } else {
+                val irDeclaration = owner as? IrDeclaration
+                if (irDeclaration != null) {
+                    try {
+                        irDeclaration.parent
+                    } catch (e: Throwable) {
+                        error("Referenced declaration has no parent: ${irDeclaration.render()}")
+                    }
+                }
             }
 
             val otherSymbol = symbolForDeclaration.getOrPut(owner) { this }

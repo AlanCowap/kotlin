@@ -9,7 +9,7 @@ version = "1.0"
 repositories {
     mavenLocal()
     jcenter()
-    maven { setUrl("http://dl.bintray.com/kotlin/kotlinx.html/") }
+    maven { setUrl("https://dl.bintray.com/kotlin/kotlinx.html/") }
 }
 
 kotlin {
@@ -19,6 +19,9 @@ kotlin {
     linuxX64("linux64")
     mingwX64("mingw64")
     macosX64("macos64")
+
+    // We use this library in the cinterop test which includes a Windows x86 target.
+    mingwX86("mingw86")
       
     targets.all {
         mavenPublication(Action<MavenPublication> {

@@ -9,6 +9,7 @@ import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.backend.common.CodegenUtil
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.context.*
+import org.jetbrains.kotlin.codegen.coroutines.getOrCreateJvmSuspendFunctionView
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.isReleaseCoroutines
 import org.jetbrains.kotlin.descriptors.*
@@ -120,7 +121,7 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
 
             val signature = codegen.state.typeMapper.mapSignatureSkipGeneric(context.functionDescriptor, context.contextKind)
             return InlineCallSiteInfo(
-                parentCodegen.className, signature.asmMethod.name, signature.asmMethod.descriptor
+                parentCodegen.className, signature.asmMethod.name, signature.asmMethod.descriptor, compilationContextFunctionDescriptor.isInlineOrInsideInline()
             )
         }
 
@@ -134,11 +135,15 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
     ): SMAP {
         lambdaInfo as? PsiExpressionLambda ?: error("TODO")
         val invokeMethodDescriptor = lambdaInfo.invokeMethodDescriptor
-        val closureContext =
-            if (lambdaInfo.isPropertyReference)
+        val closureContext = when {
+            lambdaInfo.isPropertyReference ->
                 codegen.getContext().intoAnonymousClass(lambdaInfo.classDescriptor, codegen, OwnerKind.IMPLEMENTATION)
-            else
-                codegen.getContext().intoClosure(invokeMethodDescriptor, codegen, state.typeMapper)
+            invokeMethodDescriptor.isSuspend ->
+                codegen.getContext().intoCoroutineClosure(
+                    getOrCreateJvmSuspendFunctionView(invokeMethodDescriptor, state), invokeMethodDescriptor, codegen, state.typeMapper
+                )
+            else -> codegen.getContext().intoClosure(invokeMethodDescriptor, codegen, state.typeMapper)
+        }
         val context = closureContext.intoInlinedLambda(invokeMethodDescriptor, lambdaInfo.isCrossInline, lambdaInfo.isPropertyReference)
 
         return generateMethodBody(
@@ -468,3 +473,7 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
         }
     }
 }
+
+private fun DeclarationDescriptor.isInlineOrInsideInline(): Boolean =
+    if (this is FunctionDescriptor && isInline) true
+    else containingDeclaration?.isInlineOrInsideInline() == true

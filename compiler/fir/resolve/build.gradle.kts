@@ -13,6 +13,7 @@ dependencies {
     compile(project(":core:deserialization"))
     compile(project(":compiler:fir:cones"))
     compile(project(":compiler:fir:tree"))
+    compile(project(":compiler:cli"))
 
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
@@ -38,6 +39,8 @@ sourceSets {
 
 projectTest {
     workingDir = rootDir
+    jvmArgs!!.removeIf { it.contains("-Xmx") }
+    maxHeapSize = "3g"
 }
 
 testsJar()

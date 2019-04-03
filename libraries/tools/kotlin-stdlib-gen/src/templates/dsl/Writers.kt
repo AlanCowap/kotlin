@@ -84,6 +84,9 @@ fun List<MemberBuilder>.writeTo(file: File, targetedSource: TargetedSourceFile) 
                 }
 
                 writer.appendln("@file:kotlin.jvm.JvmName(\"${sourceFile.jvmClassName}\")")
+                sourceFile.jvmPackageName?.let {
+                    writer.appendln("@file:kotlin.jvm.JvmPackageName(\"$it\")")
+                }
                 writer.appendln()
             }
         }
@@ -99,6 +102,10 @@ fun List<MemberBuilder>.writeTo(file: File, targetedSource: TargetedSourceFile) 
         }
         if (target.platform == Platform.Common) {
             writer.appendln("import kotlin.random.*")
+        }
+        if (sourceFile.packageName == "kotlin.collections") {
+            writer.appendln("import kotlin.ranges.contains")
+            writer.appendln("import kotlin.ranges.reversed")
         }
 
         writer.appendln()

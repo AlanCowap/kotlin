@@ -45,6 +45,7 @@ import org.jetbrains.plugins.gradle.service.project.GradleProjectResolverUtil.ge
 import org.jetbrains.plugins.gradle.service.project.ProjectResolverContext
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
+import java.util.*
 
 @Order(ExternalSystemConstants.UNORDERED + 1)
 open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
@@ -83,7 +84,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
             super.populateModuleCompileOutputSettings(gradleModule, ideModule)
         }
 
-        val mppModel = resolverCtx.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java) ?: return
+        val mppModel = resolverCtx.getMppModel(gradleModule) ?: return
         val ideaOutDir = File(ideModule.data.linkedExternalProjectPath, "out")
         val projectDataNode = ideModule.getDataNode(ProjectKeys.PROJECT)!!
         val moduleOutputsMap = projectDataNode.getUserData(MODULES_OUTPUTS)!!
@@ -153,6 +154,8 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
     }
 
     companion object {
+        val proxyObjectCloningCache = WeakHashMap<Any, Any>()
+
         fun initializeModuleData(
             gradleModule: IdeaModule,
             mainModuleNode: DataNode<ModuleData>,
@@ -164,7 +167,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
             val mainModuleFileDirectoryPath = mainModuleData.moduleFileDirectoryPath
 
             val externalProject = resolverCtx.getExtraProject(gradleModule, ExternalProject::class.java)
-            val mppModel = resolverCtx.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java)
+            val mppModel = resolverCtx.getMppModel(gradleModule)
             if (mppModel == null || externalProject == null) return
 
             val jdkName = gradleModule.jdkNameIfAny
@@ -311,7 +314,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
             ideModule: DataNode<ModuleData>,
             resolverCtx: ProjectResolverContext
         ) {
-            val mppModel = resolverCtx.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java) ?: return
+            val mppModel = resolverCtx.getMppModel(gradleModule) ?: return
             if (resolverCtx.getExtraProject(gradleModule, ExternalProject::class.java) == null) return
             processSourceSets(gradleModule, mppModel, ideModule, resolverCtx) { dataNode, sourceSet ->
                 if (dataNode == null || sourceSet.platform == KotlinPlatform.ANDROID) return@processSourceSets
@@ -338,7 +341,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
             ideModule: DataNode<ModuleData>,
             resolverCtx: ProjectResolverContext
         ) {
-            val mppModel = resolverCtx.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java) ?: return
+            val mppModel = resolverCtx.getMppModel(gradleModule) ?: return
             val sourceSetMap = ideProject.getUserData(GradleProjectResolver.RESOLVED_SOURCE_SETS) ?: return
             val artifactsMap = ideProject.getUserData(CONFIGURATION_ARTIFACTS) ?: return
             val substitutor = KotlinNativeLibrariesDependencySubstitutor(mppModel, gradleModule, resolverCtx)
@@ -648,11 +651,13 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
                 sourceSetInfo.gradleModuleId = getModuleId(resolverCtx, gradleModule)
                 sourceSetInfo.platform = compilation.platform
                 sourceSetInfo.isTestModule = compilation.isTestModule
-                sourceSetInfo.compilerArguments = createCompilerArguments(compilation.arguments.currentArguments, compilation.platform).also {
-                    it.multiPlatform = true
-                }
+                sourceSetInfo.compilerArguments =
+                    createCompilerArguments(compilation.arguments.currentArguments, compilation.platform).also {
+                        it.multiPlatform = true
+                    }
                 sourceSetInfo.dependencyClasspath = compilation.dependencyClasspath
-                sourceSetInfo.defaultCompilerArguments = createCompilerArguments(compilation.arguments.defaultArguments, compilation.platform)
+                sourceSetInfo.defaultCompilerArguments =
+                    createCompilerArguments(compilation.arguments.defaultArguments, compilation.platform)
                 sourceSetInfo.addSourceSets(compilation.sourceSets, compilation.fullName(), gradleModule, resolverCtx)
             }
         }
@@ -679,7 +684,7 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
         }
 
         private fun KotlinModule.fullName(simpleName: String = name) = when (this) {
-            is KotlinCompilation -> compilationFullName(simpleName, target.disambiguationClassifier)
+            is KotlinCompilation -> compilationFullName(simpleName, disambiguationClassifier)
             else -> simpleName
         }
 
@@ -687,6 +692,21 @@ open class KotlinMPPGradleProjectResolver : AbstractProjectResolverExtension() {
             getModuleId(resolverCtx, gradleModule) + ":" + kotlinModule.fullName()
 
         private fun ExternalProject.notImportedCommonSourceSets() =
-            GradlePropertiesFileFacade.forExternalProject(this).readProperty(KOTLIN_NOT_IMPORTED_COMMON_SOURCE_SETS_SETTING)?.equals("true", ignoreCase = true) ?: false
+            GradlePropertiesFileFacade.forExternalProject(this).readProperty(KOTLIN_NOT_IMPORTED_COMMON_SOURCE_SETS_SETTING)?.equals(
+                "true",
+                ignoreCase = true
+            ) ?: false
     }
 }
+
+fun ProjectResolverContext.getMppModel(gradleModule: IdeaModule): KotlinMPPGradleModel? =
+    this.getExtraProject(gradleModule, KotlinMPPGradleModel::class.java)
+        ?.let { kotlinMppModel ->
+            KotlinMPPGradleProjectResolver.proxyObjectCloningCache[kotlinMppModel] as? KotlinMPPGradleModelImpl ?: KotlinMPPGradleModelImpl(
+                kotlinMppModel,
+                KotlinMPPGradleProjectResolver.proxyObjectCloningCache
+            ).also {
+                KotlinMPPGradleProjectResolver.proxyObjectCloningCache[kotlinMppModel] = it
+            }
+        }
+

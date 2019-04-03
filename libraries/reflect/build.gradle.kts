@@ -53,6 +53,7 @@ dependencies {
     proguardAdditionalInJars(project(":kotlin-annotations-jvm"))
     proguardDeps(files(firstFromJavaHomeThatExists("jre/lib/rt.jar", "../Classes/classes.jar", jdkHome = File(property("JDK_16") as String))))
 
+    shadows(project(":core:type-system"))
     shadows(project(":kotlin-reflect-api"))
     shadows(project(":core:metadata"))
     shadows(project(":core:metadata.jvm"))
@@ -95,7 +96,7 @@ class KotlinModuleShadowTransformer(private val logger: Logger) : Transformer {
     override fun hasTransformedResource(): Boolean =
             data.isNotEmpty()
 
-    override fun modifyOutputStream(os: ZipOutputStream) {
+    override fun modifyOutputStream(os: ZipOutputStream, preserveFileTimestamps: Boolean) {
         for ((path, bytes) in data) {
             os.putNextEntry(ZipEntry(path))
             os.write(bytes)
@@ -142,7 +143,7 @@ val proguard by task<ProGuardTask> {
     outputs.file(proguardOutput)
 
     injars(mapOf("filter" to "!META-INF/versions/**"), stripMetadata.outputs.files)
-    injars(mapOf("filter" to "!META-INF/**"), proguardAdditionalInJars)
+    injars(mapOf("filter" to "!META-INF/**,!**/*.kotlin_builtins"), proguardAdditionalInJars)
     outjars(proguardOutput)
 
     libraryjars(mapOf("filter" to "!META-INF/versions/**"), proguardDeps)

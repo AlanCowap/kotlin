@@ -5,27 +5,24 @@
 
 package org.jetbrains.kotlin.fir
 
-import com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.fir.java.FirJavaModuleBasedSession
-import org.jetbrains.kotlin.fir.java.FirLibrarySession
-import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
+import com.intellij.openapi.extensions.Extensions
+import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiElementFinder
+import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment
 
 abstract class AbstractFirResolveWithSessionTestCase : KotlinTestWithEnvironment() {
 
-    open fun createSession(sourceScope: GlobalSearchScope): FirSession {
-        val moduleInfo = FirTestModuleInfo()
-        val provider = FirProjectSessionProvider(project)
-        return FirJavaModuleBasedSession(moduleInfo, provider, sourceScope).also {
-            createSessionForDependencies(provider, moduleInfo, sourceScope)
-        }
+    override fun setUp() {
+        super.setUp()
+
+        prepareProjectExtensions(project)
     }
 
-    private fun createSessionForDependencies(
-        provider: FirProjectSessionProvider, moduleInfo: FirTestModuleInfo, sourceScope: GlobalSearchScope
-    ) {
-        val dependenciesInfo = FirTestModuleInfo()
-        moduleInfo.dependencies.add(dependenciesInfo)
-        FirLibrarySession(dependenciesInfo, provider, GlobalSearchScope.notScope(sourceScope))
+    protected fun prepareProjectExtensions(project: Project) {
+        Extensions.getArea(project)
+            .getExtensionPoint(PsiElementFinder.EP_NAME)
+            .unregisterExtension(JavaElementFinder::class.java)
     }
+
 }

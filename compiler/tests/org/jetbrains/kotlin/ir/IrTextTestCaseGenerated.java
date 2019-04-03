@@ -264,6 +264,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
             runTest("compiler/testData/ir/irText/declarations/fileWithAnnotations.kt");
         }
 
+        @TestMetadata("fileWithTypeAliasesOnly.kt")
+        public void testFileWithTypeAliasesOnly() throws Exception {
+            runTest("compiler/testData/ir/irText/declarations/fileWithTypeAliasesOnly.kt");
+        }
+
         @TestMetadata("interfaceProperties.kt")
         public void testInterfaceProperties() throws Exception {
             runTest("compiler/testData/ir/irText/declarations/interfaceProperties.kt");
@@ -272,6 +277,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
         @TestMetadata("kt27005.kt")
         public void testKt27005() throws Exception {
             runTest("compiler/testData/ir/irText/declarations/kt27005.kt");
+        }
+
+        @TestMetadata("kt29833.kt")
+        public void testKt29833() throws Exception {
+            runTest("compiler/testData/ir/irText/declarations/kt29833.kt");
         }
 
         @TestMetadata("localClassWithOverrides.kt")
@@ -882,6 +892,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
             runTest("compiler/testData/ir/irText/expressions/genericPropertyCall.kt");
         }
 
+        @TestMetadata("genericPropertyRef.kt")
+        public void testGenericPropertyRef() throws Exception {
+            runTest("compiler/testData/ir/irText/expressions/genericPropertyRef.kt");
+        }
+
         @TestMetadata("identity.kt")
         public void testIdentity() throws Exception {
             runTest("compiler/testData/ir/irText/expressions/identity.kt");
@@ -982,6 +997,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
             runTest("compiler/testData/ir/irText/expressions/kt28456b.kt");
         }
 
+        @TestMetadata("kt30020.kt")
+        public void testKt30020() throws Exception {
+            runTest("compiler/testData/ir/irText/expressions/kt30020.kt");
+        }
+
         @TestMetadata("lambdaInCAO.kt")
         public void testLambdaInCAO() throws Exception {
             runTest("compiler/testData/ir/irText/expressions/lambdaInCAO.kt");
@@ -1045,6 +1065,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
         @TestMetadata("primitivesImplicitConversions.kt")
         public void testPrimitivesImplicitConversions() throws Exception {
             runTest("compiler/testData/ir/irText/expressions/primitivesImplicitConversions.kt");
+        }
+
+        @TestMetadata("propertyReferences.kt")
+        public void testPropertyReferences() throws Exception {
+            runTest("compiler/testData/ir/irText/expressions/propertyReferences.kt");
         }
 
         @TestMetadata("references.kt")
@@ -1493,6 +1518,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
             runTest("compiler/testData/ir/irText/stubs/genericClassInDifferentModule.kt");
         }
 
+        @TestMetadata("javaConstructorWithTypeParameters.kt")
+        public void testJavaConstructorWithTypeParameters() throws Exception {
+            runTest("compiler/testData/ir/irText/stubs/javaConstructorWithTypeParameters.kt");
+        }
+
         @TestMetadata("javaEnum.kt")
         public void testJavaEnum() throws Exception {
             runTest("compiler/testData/ir/irText/stubs/javaEnum.kt");
@@ -1564,6 +1594,11 @@ public class IrTextTestCaseGenerated extends AbstractIrTextTestCase {
         @TestMetadata("intersectionType3.kt")
         public void testIntersectionType3() throws Exception {
             runTest("compiler/testData/ir/irText/types/intersectionType3.kt");
+        }
+
+        @TestMetadata("localVariableOfIntersectionType.kt")
+        public void testLocalVariableOfIntersectionType() throws Exception {
+            runTest("compiler/testData/ir/irText/types/localVariableOfIntersectionType.kt");
         }
     }
 }

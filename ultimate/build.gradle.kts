@@ -28,12 +28,13 @@ dependencies {
     compile(project(":core:descriptors.jvm")) { isTransitive = false }
     compile(project(":core:util.runtime")) { isTransitive = false }
     compile(project(":compiler:light-classes")) { isTransitive = false }
+    compile(project(":core:type-system")) { isTransitive = false }
     compile(project(":compiler:frontend")) { isTransitive = false }
     compile(project(":compiler:frontend.common")) { isTransitive = false }
     compile(project(":compiler:frontend.java")) { isTransitive = false }
     compile(project(":compiler:util")) { isTransitive = false }
     compile(project(":js:js.frontend")) { isTransitive = false }
-    compile(projectClasses(":idea"))
+    compile(project(":idea")) { isTransitive = false }
     compile(project(":idea:idea-jvm")) { isTransitive = false }
     compile(project(":idea:idea-core")) { isTransitive = false }
     compile(project(":idea:ide-common")) { isTransitive = false }
@@ -43,7 +44,7 @@ dependencies {
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
     if (intellijUltimateEnabled) {
-        compileOnly(intellijUltimatePluginDep("NodeJS"))
+        compileOnly(nodeJSPlugin())
         compileOnly(intellijUltimateDep()) { includeJars("trove4j", "openapi", "platform-api", "platform-impl", "java-api", "java-impl", "idea", "util", "jdom") }
         compileOnly(intellijUltimatePluginDep("CSS"))
         compileOnly(intellijUltimatePluginDep("DatabaseTools"))
@@ -97,7 +98,7 @@ dependencies {
     testRuntime(project(":allopen-ide-plugin")) { isTransitive = false }
     testRuntime(project(":kotlin-allopen-compiler-plugin")) { isTransitive = false }
     testRuntime(project(":kotlin-scripting-idea")) { isTransitive = false }
-    testRuntime(project(":kotlin-scripting-compiler")) { isTransitive = false }
+    testRuntime(project(":kotlin-scripting-impl")) { isTransitive = false }
     testRuntime(project(":kotlinx-serialization-compiler-plugin")) { isTransitive = false }
     testRuntime(project(":kotlinx-serialization-ide-plugin")) { isTransitive = false }
     testRuntime(project(":plugins:kapt3-idea")) { isTransitive = false }
@@ -106,6 +107,7 @@ dependencies {
     testRuntime(intellijPluginDep("smali"))
 
     if (intellijUltimateEnabled) {
+        testCompile(nodeJSPlugin())
         testCompile(intellijUltimatePluginDep("CSS"))
         testCompile(intellijUltimatePluginDep("DatabaseTools"))
         testCompile(intellijUltimatePluginDep("JavaEE"))
@@ -115,7 +117,6 @@ dependencies {
         testCompile(intellijUltimatePluginDep("uml"))
         testCompile(intellijUltimatePluginDep("JavaScriptLanguage"))
         testCompile(intellijUltimatePluginDep("JavaScriptDebugger"))
-        testCompile(intellijUltimatePluginDep("NodeJS"))
         testCompile(intellijUltimatePluginDep("properties"))
         testCompile(intellijUltimatePluginDep("java-i18n"))
         testCompile(intellijUltimatePluginDep("gradle"))

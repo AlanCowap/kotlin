@@ -63,7 +63,7 @@ class IrSourceCompilerForInline(
         get() = OwnerKind.getMemberOwnerKind(callElement.descriptor.containingDeclaration)
 
     override val inlineCallSiteInfo: InlineCallSiteInfo
-        get() = InlineCallSiteInfo("TODO", null, null)
+        get() = InlineCallSiteInfo("TODO", null, null, false)
 
     override val lazySourceMapper: DefaultSourceMapper
         get() = codegen.classCodegen.getOrCreateSourceMapper()
@@ -200,7 +200,7 @@ class IrSourceCompilerForInline(
                 }
 
                 override fun getSerializationBindings(): JvmSerializationBindings {
-                    TODO("not implemented")
+                    return JvmSerializationBindings()
                 }
 
                 override fun newAnnotation(desc: String, visible: Boolean): AnnotationVisitor {

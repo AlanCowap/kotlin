@@ -10,15 +10,15 @@ import com.intellij.psi.tree.IElementType
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.fir.FirReference
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.FirNamedDeclaration
 import org.jetbrains.kotlin.fir.declarations.impl.FirVariableImpl
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.impl.*
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.references.FirExplicitThisReference
 import org.jetbrains.kotlin.fir.references.FirSimpleNamedReference
-import org.jetbrains.kotlin.fir.types.FirType
-import org.jetbrains.kotlin.fir.types.impl.FirImplicitTypeImpl
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
+import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.impl.FirImplicitTypeRefImpl
 import org.jetbrains.kotlin.ir.expressions.IrConstKind
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
@@ -110,9 +110,11 @@ internal fun generateConstantExpressionByLiteral(session: FirSession, expression
                 FirConstExpressionImpl(
                     session, expression, IrConstKind.Long, convertedText, "Incorrect long: $text"
                 )
-            } else {
+            } else if (convertedText is Number) {
                 // TODO: support byte / short
-                FirConstExpressionImpl(session, expression, IrConstKind.Int, (convertedText as Number).toInt(), "Incorrect int: $text")
+                FirConstExpressionImpl(session, expression, IrConstKind.Int, convertedText.toInt(), "Incorrect int: $text")
+            } else {
+                FirErrorExpressionImpl(session, expression, reason = "Incorrect constant expression: $text")
             }
         KtNodeTypes.FLOAT_CONSTANT ->
             if (convertedText is Float) {
@@ -175,7 +177,9 @@ internal fun IElementType.toFirOperation(): FirOperation =
         else -> throw AssertionError(this.toString())
     }
 
-internal fun FirExpression.generateNotNullOrOther(other: FirExpression, caseId: String, basePsi: KtElement): FirWhenExpression {
+internal fun FirExpression.generateNotNullOrOther(
+    session: FirSession, other: FirExpression, caseId: String, basePsi: KtElement
+): FirWhenExpression {
     val subjectName = Name.special("<$caseId>")
     val subjectVariable = generateTemporaryVariable(session, psi, subjectName, this)
     val subjectExpression = FirWhenSubjectExpression(session, psi)
@@ -261,24 +265,27 @@ internal fun generateAccessExpression(session: FirSession, psi: PsiElement?, nam
 internal fun generateDestructuringBlock(
     session: FirSession,
     multiDeclaration: KtDestructuringDeclaration,
-    container: FirNamedDeclaration,
+    container: FirVariable,
+    tmpVariable: Boolean,
     extractAnnotationsTo: KtAnnotated.(FirAbstractAnnotatedElement) -> Unit,
-    toFirOrImplicitType: KtTypeReference?.() -> FirType
+    toFirOrImplicitTypeRef: KtTypeReference?.() -> FirTypeRef
 ): FirExpression {
     return FirBlockImpl(session, multiDeclaration).apply {
-        if (container is FirVariable) {
+        if (tmpVariable) {
             statements += container
         }
         val isVar = multiDeclaration.isVar
         for ((index, entry) in multiDeclaration.entries.withIndex()) {
             statements += FirVariableImpl(
                 session, entry, entry.nameAsSafeName,
-                entry.typeReference.toFirOrImplicitType(), isVar,
+                entry.typeReference.toFirOrImplicitTypeRef(), isVar,
                 FirComponentCallImpl(session, entry, index + 1).apply {
                     arguments += generateAccessExpression(session, entry, container.name)
-                }
+                },
+                FirVariableSymbol(entry.nameAsSafeName) // TODO?
             ).apply {
                 entry.extractAnnotationsTo(this)
+                symbol.bind(this)
             }
         }
     }
@@ -286,7 +293,10 @@ internal fun generateDestructuringBlock(
 
 internal fun generateTemporaryVariable(
     session: FirSession, psi: PsiElement?, name: Name, initializer: FirExpression
-): FirVariable = FirVariableImpl(session, psi, name, FirImplicitTypeImpl(session, psi), false, initializer)
+): FirVariable =
+    FirVariableImpl(session, psi, name, FirImplicitTypeRefImpl(session, psi), false, initializer, FirVariableSymbol(name)).apply {
+        symbol.bind(this)
+    }
 
 internal fun generateTemporaryVariable(
     session: FirSession, psi: PsiElement?, specialName: String, initializer: FirExpression

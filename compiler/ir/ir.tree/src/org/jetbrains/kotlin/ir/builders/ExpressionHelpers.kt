@@ -117,22 +117,34 @@ fun IrBuilderWithScope.irBranch(condition: IrExpression, result: IrExpression) =
 fun IrBuilderWithScope.irElseBranch(expression: IrExpression) =
     IrElseBranchImpl(startOffset, endOffset, irTrue(), expression)
 
-fun IrBuilderWithScope.irIfThen(type: IrType, condition: IrExpression, thenPart: IrExpression) =
-    IrIfThenElseImpl(startOffset, endOffset, type).apply {
+fun IrBuilderWithScope.irIfThen(type: IrType, condition: IrExpression, thenPart: IrExpression, origin: IrStatementOrigin? = null) =
+    IrIfThenElseImpl(startOffset, endOffset, type, origin).apply {
         branches.add(IrBranchImpl(startOffset, endOffset, condition, thenPart))
     }
 
-fun IrBuilderWithScope.irIfThenElse(type: IrType, condition: IrExpression, thenPart: IrExpression, elsePart: IrExpression) =
-    IrIfThenElseImpl(startOffset, endOffset, type).apply {
+fun IrBuilderWithScope.irIfThenElse(
+    type: IrType,
+    condition: IrExpression,
+    thenPart: IrExpression,
+    elsePart: IrExpression,
+    origin: IrStatementOrigin? = null
+) =
+    IrIfThenElseImpl(startOffset, endOffset, type, origin).apply {
         branches.add(IrBranchImpl(startOffset, endOffset, condition, thenPart))
         branches.add(irElseBranch(elsePart))
     }
 
-fun IrBuilderWithScope.irIfThenMaybeElse(type: IrType, condition: IrExpression, thenPart: IrExpression, elsePart: IrExpression?) =
+fun IrBuilderWithScope.irIfThenMaybeElse(
+    type: IrType,
+    condition: IrExpression,
+    thenPart: IrExpression,
+    elsePart: IrExpression?,
+    origin: IrStatementOrigin? = null
+) =
     if (elsePart != null)
-        irIfThenElse(type, condition, thenPart, elsePart)
+        irIfThenElse(type, condition, thenPart, elsePart, origin)
     else
-        irIfThen(type, condition, thenPart)
+        irIfThen(type, condition, thenPart, origin)
 
 fun IrBuilderWithScope.irIfNull(type: IrType, subject: IrExpression, thenPart: IrExpression, elsePart: IrExpression) =
     irIfThenElse(type, irEqualsNull(subject), thenPart, elsePart)
@@ -171,23 +183,23 @@ fun IrBuilderWithScope.irNull() =
 
 fun IrBuilderWithScope.irEqualsNull(argument: IrExpression) =
     primitiveOp2(
-        startOffset, endOffset, context.irBuiltIns.eqeqSymbol, IrStatementOrigin.EQEQ,
+        startOffset, endOffset, context.irBuiltIns.eqeqSymbol, context.irBuiltIns.booleanType, IrStatementOrigin.EQEQ,
         argument, irNull()
     )
 
 fun IrBuilderWithScope.irEquals(arg1: IrExpression, arg2: IrExpression, origin: IrStatementOrigin = IrStatementOrigin.EQEQ) =
     primitiveOp2(
-        startOffset, endOffset, context.irBuiltIns.eqeqSymbol, origin,
+        startOffset, endOffset, context.irBuiltIns.eqeqSymbol, context.irBuiltIns.booleanType, origin,
         arg1, arg2
     )
 
 fun IrBuilderWithScope.irNotEquals(arg1: IrExpression, arg2: IrExpression) =
     primitiveOp1(
-        startOffset, endOffset, context.irBuiltIns.booleanNotSymbol, IrStatementOrigin.EXCLEQ,
+        startOffset, endOffset, context.irBuiltIns.booleanNotSymbol, context.irBuiltIns.booleanType, IrStatementOrigin.EXCLEQ,
         irEquals(arg1, arg2, origin = IrStatementOrigin.EXCLEQ)
     )
 
-fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression, getterSymbol: IrFunctionSymbol): IrCall =
+fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression?, getterSymbol: IrFunctionSymbol): IrCall =
     IrGetterCallImpl(
         startOffset, endOffset,
         type,
@@ -196,6 +208,18 @@ fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression, getterSymbol:
         dispatchReceiver = receiver,
         extensionReceiver = null,
         origin = IrStatementOrigin.GET_PROPERTY
+    )
+
+fun IrBuilderWithScope.irSet(type: IrType, receiver: IrExpression?, getterSymbol: IrFunctionSymbol, value: IrExpression): IrCall =
+    IrSetterCallImpl(
+        startOffset, endOffset,
+        type,
+        getterSymbol, getterSymbol.descriptor,
+        typeArgumentsCount = 0,
+        dispatchReceiver = receiver,
+        extensionReceiver = null,
+        argument = value,
+        origin = IrStatementOrigin.EQ
     )
 
 fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, type: IrType, typeArguments: List<IrType> = emptyList()): IrCall =
@@ -271,3 +295,42 @@ fun IrBuilderWithScope.irSetField(receiver: IrExpression, irField: IrField, valu
         value = value,
         type = context.irBuiltIns.unitType
     )
+
+inline fun IrBuilderWithScope.irBlock(
+    startOffset: Int = this.startOffset,
+    endOffset: Int = this.endOffset,
+    origin: IrStatementOrigin? = null,
+    resultType: IrType? = null,
+    body: IrBlockBuilder.() -> Unit
+): IrExpression =
+    IrBlockBuilder(
+        context, scope,
+        startOffset,
+        endOffset,
+        origin, resultType
+    ).block(body)
+
+inline fun IrBuilderWithScope.irComposite(
+    startOffset: Int = this.startOffset,
+    endOffset: Int = this.endOffset,
+    origin: IrStatementOrigin? = null,
+    resultType: IrType? = null,
+    body: IrBlockBuilder.() -> Unit
+): IrExpression =
+    IrBlockBuilder(
+        context, scope,
+        startOffset,
+        endOffset,
+        origin, resultType, true
+    ).block(body)
+
+inline fun IrBuilderWithScope.irBlockBody(
+    startOffset: Int = this.startOffset,
+    endOffset: Int = this.endOffset,
+    body: IrBlockBodyBuilder.() -> Unit
+): IrBlockBody =
+    IrBlockBodyBuilder(
+        context, scope,
+        startOffset,
+        endOffset
+    ).blockBody(body)

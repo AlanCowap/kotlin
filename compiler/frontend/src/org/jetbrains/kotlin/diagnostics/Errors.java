@@ -55,6 +55,7 @@ public interface Errors {
 
     DiagnosticFactory1<PsiElement, String> NEW_INFERENCE_ERROR = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, String> NEW_INFERENCE_DIAGNOSTIC = DiagnosticFactory1.create(WARNING);
+    DiagnosticFactory0<KtElement> NON_APPLICABLE_CALL_FOR_BUILDER_INFERENCE = DiagnosticFactory0.create(WARNING);
 
     DiagnosticFactory1<PsiElement, Pair<LanguageFeature, LanguageVersionSettings>> UNSUPPORTED_FEATURE = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, Throwable> EXCEPTION_FROM_ANALYZER = DiagnosticFactory1.create(ERROR);
@@ -98,6 +99,7 @@ public interface Errors {
     DiagnosticFactory2<PsiElement, String, String> API_NOT_AVAILABLE = DiagnosticFactory2.create(ERROR);
 
     DiagnosticFactory1<PsiElement, FqName> MISSING_DEPENDENCY_CLASS = DiagnosticFactory1.create(ERROR);
+    DiagnosticFactory1<PsiElement, FqName> MISSING_BUILT_IN_DECLARATION = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, String> MISSING_SCRIPT_BASE_CLASS = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, String> MISSING_SCRIPT_STANDARD_TEMPLATE = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, String> MISSING_SCRIPT_RECEIVER_CLASS = DiagnosticFactory1.create(ERROR);
@@ -213,11 +215,14 @@ public interface Errors {
     DiagnosticFactory2<KtAnnotationEntry, String, String> WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET = DiagnosticFactory2.create(ERROR);
     DiagnosticFactory1<KtAnnotationEntry, String> WRONG_ANNOTATION_TARGET_WITH_USE_SITE_TARGET_ON_TYPE = DiagnosticFactory1.create(WARNING);
     DiagnosticFactory0<KtAnnotationEntry> REPEATED_ANNOTATION = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<KtAnnotationEntry> REPEATED_ANNOTATION_WARNING = DiagnosticFactory0.create(WARNING);
     DiagnosticFactory0<KtAnnotationEntry> NON_SOURCE_ANNOTATION_ON_INLINED_LAMBDA_EXPRESSION = DiagnosticFactory0.create(ERROR);
 
     // Annotations
 
     DiagnosticFactory0<KtSuperTypeList> SUPERTYPES_FOR_ANNOTATION_CLASS = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<KtAnnotationEntry> ANNOTATION_ON_SUPERCLASS = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<KtAnnotationEntry> ANNOTATION_ON_SUPERCLASS_WARNING = DiagnosticFactory0.create(WARNING);
     DiagnosticFactory0<KtParameter> MISSING_VAL_ON_ANNOTATION_PARAMETER = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtParameter> VAR_ANNOTATION_PARAMETER = DiagnosticFactory0.create(ERROR, VAL_OR_VAR_NODE);
     DiagnosticFactory0<KtCallExpression> ANNOTATION_CLASS_CONSTRUCTOR_CALL = DiagnosticFactory0.create(ERROR);
@@ -228,6 +233,8 @@ public interface Errors {
     DiagnosticFactory0<KtExpression> ANNOTATION_ARGUMENT_MUST_BE_CONST = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtExpression> ANNOTATION_ARGUMENT_MUST_BE_KCLASS_LITERAL = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtExpression> ANNOTATION_ARGUMENT_MUST_BE_ENUM_CONST = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<KtExpression> ANNOTATION_ARGUMENT_KCLASS_LITERAL_OF_TYPE_PARAMETER = DiagnosticFactory0.create(WARNING);
+    DiagnosticFactory0<KtExpression> ANNOTATION_ARGUMENT_KCLASS_LITERAL_OF_TYPE_PARAMETER_ERROR = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtExpression> ANNOTATION_PARAMETER_DEFAULT_VALUE_MUST_BE_CONSTANT = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory0<KtAnnotatedExpression> ANNOTATIONS_ON_BLOCK_LEVEL_EXPRESSION_ON_THE_SAME_LINE = DiagnosticFactory0.create(WARNING);
     DiagnosticFactory0<KtAnnotationEntry> ANNOTATION_USED_AS_ANNOTATION_ARGUMENT = DiagnosticFactory0.create(ERROR);
@@ -396,6 +403,7 @@ public interface Errors {
     DiagnosticFactory1<KtObjectDeclaration, ClassDescriptor> LOCAL_OBJECT_NOT_ALLOWED = DiagnosticFactory1.create(ERROR, DECLARATION_NAME);
     DiagnosticFactory1<KtClass, ClassDescriptor> LOCAL_INTERFACE_NOT_ALLOWED = DiagnosticFactory1.create(ERROR, DECLARATION_NAME);
     DiagnosticFactory0<KtTypeParameterList> TYPE_PARAMETERS_IN_OBJECT = DiagnosticFactory0.create(ERROR);
+    DiagnosticFactory0<KtTypeParameterList> TYPE_PARAMETERS_IN_ANONYMOUS_OBJECT = DiagnosticFactory0.create(WARNING);
 
     // Type parameter declarations
 
@@ -737,6 +745,8 @@ public interface Errors {
 
     DiagnosticFactory0<KtExpression> TYPE_INFERENCE_FAILED_ON_SPECIAL_CONSTRUCT = DiagnosticFactory0.create(ERROR, SPECIAL_CONSTRUCT_TOKEN);
 
+    DiagnosticFactory0<PsiElement> IMPLICIT_NOTHING_AS_TYPE_PARAMETER = DiagnosticFactory0.create(WARNING);
+
     // Reflection
 
     DiagnosticFactory1<KtExpression, CallableMemberDescriptor> EXTENSION_IN_CLASS_REFERENCE_NOT_ALLOWED = DiagnosticFactory1.create(ERROR);
@@ -794,6 +804,8 @@ public interface Errors {
 
     DiagnosticFactory2<KtElement, KotlinType, KotlinType> INCOMPATIBLE_ENUM_COMPARISON =
             DiagnosticFactory2.create(WARNING);
+    DiagnosticFactory2<KtElement, KotlinType, KotlinType> INCOMPATIBLE_ENUM_COMPARISON_ERROR =
+            DiagnosticFactory2.create(ERROR);
 
     DiagnosticFactory1<KtExpression, KotlinType> HAS_NEXT_MISSING = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<KtExpression, KotlinType> HAS_NEXT_FUNCTION_AMBIGUITY = DiagnosticFactory1.create(ERROR);

@@ -7,12 +7,12 @@ package org.jetbrains.kotlin.ir.backend.js.lower.calls
 
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.util.getSimpleFunction
+import org.jetbrains.kotlin.ir.util.getPropertyGetter
 
 class PrimitiveContainerMemberCallTransformer(private val context: JsIrBackendContext) : CallsTransformer {
     private val intrinsics = context.intrinsics
@@ -25,12 +25,12 @@ class PrimitiveContainerMemberCallTransformer(private val context: JsIrBackendCo
             add(context.intrinsics.array.sizeProperty, context.intrinsics.jsArrayLength, true)
             add(context.intrinsics.array.getFunction, context.intrinsics.jsArrayGet, true)
             add(context.intrinsics.array.setFunction, context.intrinsics.jsArraySet, true)
-            add(context.intrinsics.array.iterator, context.intrinsics.jsArrayIteratorFunction.owner, true)
+            add(context.intrinsics.array.iterator, context.intrinsics.jsArrayIteratorFunction, true)
             for ((key, elementType) in context.intrinsics.primitiveArrays) {
                 add(key.sizeProperty, context.intrinsics.jsArrayLength, true)
                 add(key.getFunction, context.intrinsics.jsArrayGet, true)
                 add(key.setFunction, context.intrinsics.jsArraySet, true)
-                add(key.iterator, context.intrinsics.jsPrimitiveArrayIteratorFunctions[elementType]!!.owner, true)
+                add(key.iterator, context.intrinsics.jsPrimitiveArrayIteratorFunctions[elementType]!!, true)
 
                 // TODO irCall?
                 add(key.sizeConstructor) { call ->
@@ -46,11 +46,11 @@ class PrimitiveContainerMemberCallTransformer(private val context: JsIrBackendCo
             }
 
             add(context.irBuiltIns.stringClass.lengthProperty, context.intrinsics.jsArrayLength, true)
-            add(context.irBuiltIns.stringClass.getFunction, intrinsics.jsCharSequenceGet.owner, true)
-            add(context.irBuiltIns.stringClass.subSequence, intrinsics.jsCharSequenceSubSequence.owner, true)
-            add(intrinsics.charSequenceLengthPropertyGetterSymbol, intrinsics.jsCharSequenceLength.owner, true)
-            add(intrinsics.charSequenceGetFunctionSymbol, intrinsics.jsCharSequenceGet.owner, true)
-            add(intrinsics.charSequenceSubSequenceFunctionSymbol, intrinsics.jsCharSequenceSubSequence.owner, true)
+            add(context.irBuiltIns.stringClass.getFunction, intrinsics.jsCharSequenceGet, true)
+            add(context.irBuiltIns.stringClass.subSequence, intrinsics.jsCharSequenceSubSequence, true)
+            add(intrinsics.charSequenceLengthPropertyGetterSymbol, intrinsics.jsCharSequenceLength, true)
+            add(intrinsics.charSequenceGetFunctionSymbol, intrinsics.jsCharSequenceGet, true)
+            add(intrinsics.charSequenceSubSequenceFunctionSymbol, intrinsics.jsCharSequenceSubSequence, true)
         }
     }
 
@@ -65,22 +65,22 @@ class PrimitiveContainerMemberCallTransformer(private val context: JsIrBackendCo
 }
 
 private val IrClassSymbol.sizeProperty
-    get() = owner.declarations.filterIsInstance<IrProperty>().first { it.name.asString() == "size" }.getter!!.symbol
+    get() = getPropertyGetter("size")!!
 
 private val IrClassSymbol.getFunction
-    get() = owner.declarations.filterIsInstance<IrFunction>().first { it.name.asString() == "get" }.symbol
+    get() = getSimpleFunction("get")!!
 
 private val IrClassSymbol.setFunction
-    get() = owner.declarations.filterIsInstance<IrFunction>().first { it.name.asString() == "set" }.symbol
+    get() = getSimpleFunction("set")!!
 
 private val IrClassSymbol.iterator
-    get() = owner.declarations.filterIsInstance<IrFunction>().first { it.name.asString() == "iterator" }.symbol
+    get() = getSimpleFunction("iterator")!!
 
 private val IrClassSymbol.sizeConstructor
     get() = owner.declarations.filterIsInstance<IrConstructor>().first { it.valueParameters.size == 1 }.symbol
 
 private val IrClassSymbol.lengthProperty
-    get() = owner.declarations.filterIsInstance<IrProperty>().first { it.name.asString() == "length" }.getter!!.symbol
+    get() = getPropertyGetter("length")!!
 
 private val IrClassSymbol.subSequence
-    get() = owner.declarations.filterIsInstance<IrFunction>().single { it.name.asString() == "subSequence" }.symbol
+    get() = getSimpleFunction("subSequence")!!

@@ -233,10 +233,46 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     var phasesToDump: Array<String>? by FreezableVar(null)
 
     @Argument(
+        value = "-Xexclude-from-dumping",
+        description = "Names of elements that should not be dumped"
+    )
+    var namesExcludedFromDumping: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-validate-before",
+        description = "Validate backend state before these phases"
+    )
+    var phasesToValidateBefore: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-validate-after",
+        description = "Validate backend state after these phases"
+    )
+    var phasesToValidateAfter: Array<String>? by FreezableVar(null)
+
+    @Argument(
+        value = "-Xphases-to-validate",
+        description = "Validate backend state both before and after these phases"
+    )
+    var phasesToValidate: Array<String>? by FreezableVar(null)
+
+    @Argument(
         value = "-Xprofile-phases",
         description = "Profile backend phases"
     )
     var profilePhases: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xcheck-phase-conditions",
+        description = "Check pre- and postconditions on phases"
+    )
+    var checkPhaseConditions: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xcheck-sticky-phase-conditions",
+        description = "Run sticky condition checks on subsequent phases as well. Implies -Xcheck-phase-conditions"
+    )
+    var checkStickyPhaseConditions: Boolean by FreezableVar(false)
 
     open fun configureAnalysisFlags(collector: MessageCollector): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {

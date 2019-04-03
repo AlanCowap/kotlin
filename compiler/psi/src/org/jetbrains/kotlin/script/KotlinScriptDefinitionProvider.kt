@@ -16,14 +16,8 @@
 
 package org.jetbrains.kotlin.script
 
-import com.intellij.ide.highlighter.JavaClassFileType
 import com.intellij.openapi.components.ServiceManager
-import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiManager
-import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.psi.KtFile
 
 interface ScriptDefinitionProvider {
     fun findScriptDefinition(fileName: String): KotlinScriptDefinition?
@@ -38,34 +32,4 @@ interface ScriptDefinitionProvider {
     }
 }
 
-fun findScriptDefinition(file: VirtualFile, project: Project): KotlinScriptDefinition? {
-    if (file.isDirectory ||
-        file.extension == KotlinFileType.EXTENSION ||
-        file.extension == JavaClassFileType.INSTANCE.defaultExtension ||
-        !isKotlinFileType(file)
-    ) {
-        return null
-    }
-
-    val scriptDefinitionProvider = ScriptDefinitionProvider.getInstance(project) ?: return null
-    val psiFile = PsiManager.getInstance(project).findFile(file)
-    if (psiFile != null) {
-        if (psiFile !is KtFile) return null
-
-        // Do not use psiFile.script here because this method can be called during indexes access
-        // and accessing stubs may cause deadlock
-        // If script definition cannot be find, default script definition is used
-        // because all KtFile-s with KotlinFileType and non-kts extensions are parsed as scripts
-        val definition = scriptDefinitionProvider.findScriptDefinition(file.name)
-        return definition ?: scriptDefinitionProvider.getDefaultScriptDefinition()
-    }
-
-    return scriptDefinitionProvider.findScriptDefinition(file.name)
-}
-
-private fun isKotlinFileType(file: VirtualFile): Boolean {
-    val typeRegistry = FileTypeRegistry.getInstance()
-    return typeRegistry.getFileTypeByFile(file) == KotlinFileType.INSTANCE ||
-            typeRegistry.getFileTypeByFileName(file.name) == KotlinFileType.INSTANCE
-}
 

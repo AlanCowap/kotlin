@@ -107,7 +107,6 @@ public class KotlinTestUtils {
     private static final boolean DONT_IGNORE_TESTS_WORKING_ON_COMPATIBLE_BACKEND =
             Boolean.getBoolean("org.jetbrains.kotlin.dont.ignore.tests.working.on.compatible.backend");
 
-
     private static final boolean AUTOMATICALLY_UNMUTE_PASSED_TESTS = false;
     private static final boolean AUTOMATICALLY_MUTE_FAILED_TESTS = false;
 
@@ -304,9 +303,6 @@ public class KotlinTestUtils {
         }
     };
 
-    // We suspect sequences of eight consecutive hexadecimal digits to be a package part hash code
-    private static final Pattern STRIP_PACKAGE_PART_HASH_PATTERN = Pattern.compile("\\$([0-9a-f]{8})");
-
     private KotlinTestUtils() {
     }
 
@@ -417,9 +413,7 @@ public class KotlinTestUtils {
 
     @NotNull
     public static File tmpDirForTest(@NotNull String testClassName, @NotNull String testName) throws IOException {
-        File answer = normalizeFile(FileUtil.createTempDirectory(testClassName, testName));
-        deleteOnShutdown(answer);
-        return answer;
+        return normalizeFile(FileUtil.createTempDirectory(testClassName, testName, false));
     }
 
     @NotNull
@@ -429,10 +423,12 @@ public class KotlinTestUtils {
 
     @NotNull
     public static File tmpDir(String name) throws IOException {
-        // We should use this form. otherwise directory will be deleted on each test.
-        File answer = normalizeFile(FileUtil.createTempDirectory(new File(System.getProperty("java.io.tmpdir")), name, ""));
-        deleteOnShutdown(answer);
-        return answer;
+        return normalizeFile(FileUtil.createTempDirectory(name, "", false));
+    }
+
+    @NotNull
+    public static File tmpDirForReusableLibrary(String name) throws IOException {
+        return normalizeFile(FileUtil.createTempDirectory(new File(System.getProperty("java.io.tmpdir")), name, "", true));
     }
 
     private static File normalizeFile(File file) throws IOException {
@@ -810,9 +806,11 @@ public class KotlinTestUtils {
                     !coroutinesPackage.contains("experimental") &&
                     !isDirectiveDefined(expectedText, "!LANGUAGE: -ReleaseCoroutines");
 
+            boolean checkStateMachine = isDirectiveDefined(expectedText, "CHECK_STATE_MACHINE");
+
             testFiles.add(factory.createFile(supportModule,
                                              "CoroutineUtil.kt",
-                                             CoroutineTestUtilKt.createTextForHelpers(isReleaseCoroutines),
+                                             CoroutineTestUtilKt.createTextForHelpers(isReleaseCoroutines, checkStateMachine),
                                              directives
             ));
         }
@@ -1274,20 +1272,6 @@ public class KotlinTestUtils {
     @NotNull
     public static File replaceExtension(@NotNull File file, @Nullable String newExtension) {
         return new File(file.getParentFile(), FileUtil.getNameWithoutExtension(file) + (newExtension == null ? "" : "." + newExtension));
-    }
-
-    @NotNull
-    public static String replaceHashWithStar(@NotNull String string) {
-        return replaceHash(string, "*");
-    }
-
-    public static String replaceHash(@NotNull String string, @NotNull String replacement) {
-        //TODO: hashes are still used in SamWrapperCodegen
-        Matcher matcher = STRIP_PACKAGE_PART_HASH_PATTERN.matcher(string);
-        if (matcher.find()) {
-            return matcher.replaceAll("\\$" + replacement);
-        }
-        return string;
     }
 
     public static boolean isAllFilesPresentTest(String testName) {

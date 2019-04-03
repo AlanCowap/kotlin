@@ -47,6 +47,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import java.io.File
+import java.io.ObjectOutputStream
 
 fun makeIncrementally(
         cachesDir: File,
@@ -61,11 +62,11 @@ fun makeIncrementally(
     val files = rootsWalk.filter(File::isFile)
     val sourceFiles = files.filter { it.extension.toLowerCase() in allExtensions }.toList()
     val buildHistoryFile = File(cachesDir, "build-history.bin")
+    args.javaSourceRoots = sourceRoots.map { it.absolutePath }.toTypedArray()
 
     withIC {
         val compiler = IncrementalJvmCompilerRunner(
             cachesDir,
-            sourceRoots.map { JvmSourceRoot(it, null) }.toSet(),
             reporter,
             // Use precise setting in case of non-Gradle build
             usePreciseJavaTracking = true,
@@ -103,13 +104,13 @@ inline fun <R> withIC(enabled: Boolean = true, fn: ()->R): R {
 
 class IncrementalJvmCompilerRunner(
     workingDir: File,
-    private val javaSourceRoots: Set<JvmSourceRoot>,
     reporter: ICReporter,
     private val usePreciseJavaTracking: Boolean,
     buildHistoryFile: File,
     outputFiles: Collection<File>,
     private val modulesApiHistory: ModulesApiHistory,
-    override val kotlinSourceFilesExtensions: List<String> = DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS
+    override val kotlinSourceFilesExtensions: List<String> = DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS,
+    private val classpathFqNamesHistory: File? = null
 ) : IncrementalCompilerRunner<K2JVMCompilerArguments, IncrementalJvmCachesManager>(
     workingDir,
     "caches-jvm",
@@ -125,6 +126,8 @@ class IncrementalJvmCompilerRunner(
 
     override fun destinationDir(args: K2JVMCompilerArguments): File =
             args.destinationAsFile
+
+    private var dirtyClasspathChanges: Collection<FqName> = emptySet<FqName>()
 
     private val psiFileFactory: PsiFileFactory by lazy {
         val rootDisposable = Disposer.newDisposable()
@@ -163,6 +166,7 @@ class IncrementalJvmCompilerRunner(
             }
             is ChangesEither.Known -> {
                 dirtyFiles.addByDirtySymbols(classpathChanges.lookupSymbols)
+                dirtyClasspathChanges = classpathChanges.fqNames
                 dirtyFiles.addByDirtyClasses(classpathChanges.fqNames)
             }
         }
@@ -253,6 +257,28 @@ class IncrementalJvmCompilerRunner(
         }
     }
 
+    override fun processChangesAfterBuild(compilationMode: CompilationMode, currentBuildInfo: BuildInfo, dirtyData: DirtyData) {
+        super.processChangesAfterBuild(compilationMode, currentBuildInfo, dirtyData)
+
+        classpathFqNamesHistory ?: return
+        classpathFqNamesHistory.mkdirs()
+
+        val historyFiles = classpathFqNamesHistory.listFiles()
+        if (dirtyClasspathChanges.isEmpty() && historyFiles.isNotEmpty()) {
+            // Don't write an empty file. We check there is at least one file so that downstream task can mark what it has processed.
+            return
+        }
+
+        if (historyFiles.size > 10) {
+            historyFiles.minBy { it.lastModified() }!!.delete()
+        }
+        val newHistoryFile = classpathFqNamesHistory.resolve(System.currentTimeMillis().toString())
+        ObjectOutputStream(newHistoryFile.outputStream().buffered()).use {
+            val listOfNames = dirtyClasspathChanges.map { it.toString() }.toList()
+            it.writeObject(listOfNames)
+        }
+    }
+
     override fun postCompilationHook(exitCode: ExitCode) {}
 
     override fun updateCaches(
@@ -340,28 +366,12 @@ class IncrementalJvmCompilerRunner(
             messageCollector: MessageCollector
     ): ExitCode {
         val compiler = K2JVMCompiler()
-        val outputDir = args.destinationAsFile
-        val classpath = args.classpathAsList
-        val moduleFile = makeModuleFile(
-            args.moduleName!!,
-            isTest = false,
-            outputDir = outputDir,
-            sourcesToCompile = sourcesToCompile,
-            commonSources = args.commonSources?.map(::File).orEmpty(),
-            javaSourceRoots = javaSourceRoots,
-            classpath = classpath,
-            friendDirs = listOf()
-        )
-        val destination = args.destination
-        args.destination = null
-        args.buildFile = moduleFile.absolutePath
-
-        return try {
-            compiler.exec(messageCollector, services, args)
-        } finally {
-            args.destination = destination
-            moduleFile.delete()
-        }
+        val freeArgsBackup = args.freeArgs.toList()
+        args.freeArgs += sourcesToCompile.map { it.absolutePath }
+        args.allowNoSourceFiles = true
+        val exitCode = compiler.exec(messageCollector, services, args)
+        args.freeArgs = freeArgsBackup
+        return exitCode
     }
 }
 

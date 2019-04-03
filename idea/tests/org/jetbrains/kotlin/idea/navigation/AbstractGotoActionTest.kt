@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.idea.navigation
 
-import com.intellij.codeInsight.CodeInsightActionHandler
+import com.intellij.codeInsight.actions.CodeInsightAction
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
@@ -23,8 +23,8 @@ abstract class AbstractGotoActionTest : KotlinLightCodeInsightFixtureTestCase() 
 
         myFixture.configureByText(KotlinFileType.INSTANCE, parts[0])
 
-        val gotoAction = ActionManager.getInstance().getAction(actionName) as CodeInsightActionHandler
-        gotoAction.invoke(project, myFixture.editor, myFixture.file)
+        val gotoAction = ActionManager.getInstance().getAction(actionName) as CodeInsightAction
+        gotoAction.actionPerformedImpl(project, myFixture.editor)
 
         val fileEditorManager = FileEditorManager.getInstance(myFixture.project) as FileEditorManagerEx
         val currentEditor = fileEditorManager.selectedTextEditor ?: editor
@@ -34,8 +34,7 @@ abstract class AbstractGotoActionTest : KotlinLightCodeInsightFixtureTestCase() 
             val afterText = StringBuilder(text).insert(editor.caretModel.offset, "<caret>").toString()
 
             Assert.assertEquals(parts[1], afterText)
-        }
-        else {
+        } else {
             val fileOffset = currentEditor.caretModel.offset
             val lineNumber = currentEditor.document.getLineNumber(fileOffset)
             val lineStart = currentEditor.document.getLineStartOffset(lineNumber)

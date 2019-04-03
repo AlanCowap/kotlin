@@ -131,7 +131,7 @@ fun getModulesWithKotlinFiles(project: Project): Collection<Module> {
         .filter { module ->
             runReadAction {
                 !project.isDisposed && !module.isDisposed
-                        FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, module.getModuleScope(true))
+                        && FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, module.getModuleScope(true))
             }
         }
 }
@@ -283,14 +283,6 @@ fun hasKotlinJsRuntimeInScope(module: Module): Boolean {
 
 fun hasKotlinCommonRuntimeInScope(scope: GlobalSearchScope): Boolean {
     return IDEVirtualFileFinder(scope).hasMetadataPackage(KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME)
-}
-
-fun hasKotlinFilesOnlyInTests(module: Module): Boolean {
-    return !hasKotlinFilesInSources(module) && FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, module.getModuleScope(true))
-}
-
-fun hasKotlinFilesInSources(module: Module): Boolean {
-    return FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, module.getModuleScope(false))
 }
 
 class LibraryKindSearchScope(

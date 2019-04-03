@@ -22,7 +22,6 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
-import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.transform
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
@@ -68,26 +67,6 @@ class IrClassImpl(
                 isInline = symbol.descriptor.isInline
             )
 
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        origin: IrDeclarationOrigin,
-        descriptor: ClassDescriptor,
-        modality: Modality = descriptor.modality
-    ) :
-            this(startOffset, endOffset, origin, IrClassSymbolImpl(descriptor), modality)
-
-    constructor(
-        startOffset: Int,
-        endOffset: Int,
-        origin: IrDeclarationOrigin,
-        descriptor: ClassDescriptor,
-        modality: Modality = descriptor.modality,
-        members: List<IrDeclaration> = emptyList()
-    ) : this(startOffset, endOffset, origin, descriptor, modality) {
-        addAll(members)
-    }
-
     init {
         symbol.bind(this)
     }
@@ -101,6 +80,8 @@ class IrClassImpl(
     override val typeParameters: MutableList<IrTypeParameter> = SmartList()
 
     override val superTypes: MutableList<IrType> = SmartList()
+
+    override var metadata: MetadataSource? = null
 
     override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
         visitor.visitClass(this, data)

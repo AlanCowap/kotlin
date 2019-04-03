@@ -20,18 +20,27 @@ import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import com.intellij.psi.impl.cache.impl.id.IdIndex
+import com.intellij.psi.impl.cache.impl.id.IdIndexEntry
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.PsiSearchHelper
 import com.intellij.psi.search.SearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.util.CommonProcessors
+import com.intellij.util.indexing.FileBasedIndex
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.compat.psiSearchHelperInstance
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.scripting.shared.definitions.findScriptDefinition
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
+import java.util.*
 
 infix fun SearchScope.and(otherScope: SearchScope): SearchScope = intersectWith(otherScope)
 infix fun SearchScope.or(otherScope: SearchScope): SearchScope = union(otherScope)
@@ -108,7 +117,27 @@ fun PsiSearchHelper.isCheapEnoughToSearchConsideringOperators(
     fileToIgnoreOccurrencesIn: PsiFile?,
     progress: ProgressIndicator?
 ): PsiSearchHelper.SearchCostResult {
-    if (OperatorConventions.isConventionName(Name.identifier(name))) return PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES
+    if (OperatorConventions.isConventionName(Name.identifier(name))) {
+        return PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES
+    }
 
     return isCheapEnoughToSearch(name, scope, fileToIgnoreOccurrencesIn, progress)
+}
+
+fun findScriptsWithUsages(declaration: KtNamedDeclaration): List<VirtualFile> {
+    val project = declaration.project
+    val scope = psiSearchHelperInstance(project).getUseScope(declaration) as? GlobalSearchScope
+        ?: return emptyList()
+
+    val name = declaration.name.takeIf { it?.isNotBlank() == true } ?: return emptyList()
+    val collector = CommonProcessors.CollectProcessor(ArrayList<VirtualFile>())
+    runReadAction {
+        FileBasedIndex.getInstance().getFilesWithKey(
+            IdIndex.NAME,
+            setOf(IdIndexEntry(name, true)),
+            collector,
+            scope
+        )
+    }
+    return collector.results.filter { it.findScriptDefinition(project) != null }.toList()
 }

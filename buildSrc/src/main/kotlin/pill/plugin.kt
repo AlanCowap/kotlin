@@ -38,7 +38,7 @@ class JpsCompatiblePlugin : Plugin<Project> {
                         listOf(PDependency.Library("annotations-13.0"))
                     )
                 },
-                DependencyMapper("org.jetbrains", "annotations", "default", version = "13.0") {
+                DependencyMapper("org.jetbrains", "annotations", "default", "runtime", version = "13.0") {
                     MappedDependency(
                         null,
                         listOf(PDependency.Library("annotations-13.0"))
@@ -51,7 +51,7 @@ class JpsCompatiblePlugin : Plugin<Project> {
                 DependencyMapper("org.jetbrains.kotlin", "kotlin-stdlib-js", "distJar") { null },
                 DependencyMapper("org.jetbrains.kotlin", "kotlin-compiler", "runtimeJar") { null },
                 DependencyMapper("org.jetbrains.kotlin", "compiler", *MODULE_CONFIGURATIONS) { null },
-                DependencyMapper("kotlin.build.custom.deps", "android", "default") { dep ->
+                DependencyMapper("kotlin.build", "android", "default") { dep ->
                     val (sdkCommon, otherJars) = dep.moduleArtifacts.map { it.file }.partition { it.name == "sdk-common.jar" }
                     val mainLibrary = PDependency.ModuleLibrary(PLibrary(dep.moduleName, otherJars))
                     val deferredLibrary = PDependency.ModuleLibrary(PLibrary(dep.moduleName + "-deferred", sdkCommon))
@@ -146,13 +146,13 @@ class JpsCompatiblePlugin : Plugin<Project> {
         val jpsProject = parse(rootProject, projectLibraries, parserContext)
             .mapLibraries(this::attachPlatformSources, this::attachAsmSources)
 
-        generateKotlinPluginArtifactFile(rootProject).write()
-
         val files = render(jpsProject)
 
         removeExistingIdeaLibrariesAndModules()
         removeJpsAndPillRunConfigurations()
         removeAllArtifactConfigurations()
+
+        generateKotlinPluginArtifactFile(rootProject).write()
 
         copyRunConfigurations()
         setOptionsForDefaultJunitRunConfiguration(rootProject)
@@ -176,7 +176,7 @@ class JpsCompatiblePlugin : Plugin<Project> {
     private fun removeJpsAndPillRunConfigurations() {
         File(projectDir, ".idea/runConfigurations")
             .walk()
-            .filter { (it.name.startsWith("JPS_") || it.name.startsWith("PILL_")) && it.extension.toLowerCase() == "xml" }
+            .filter { (it.name.startsWith("JPS_") || it.name.startsWith("Pill_")) && it.extension.toLowerCase() == "xml" }
             .forEach { it.delete() }
     }
 

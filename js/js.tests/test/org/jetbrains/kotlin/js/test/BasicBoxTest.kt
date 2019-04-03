@@ -43,6 +43,8 @@ import org.jetbrains.kotlin.js.parser.sourcemaps.SourceMapParser
 import org.jetbrains.kotlin.js.parser.sourcemaps.SourceMapSuccess
 import org.jetbrains.kotlin.js.sourceMap.SourceFilePathResolver
 import org.jetbrains.kotlin.js.sourceMap.SourceMap3Builder
+import org.jetbrains.kotlin.js.test.interop.ScriptEngineNashorn
+import org.jetbrains.kotlin.js.test.interop.ScriptEngineV8Lazy
 import org.jetbrains.kotlin.js.test.utils.*
 import org.jetbrains.kotlin.js.util.TextOutputImpl
 import org.jetbrains.kotlin.metadata.DebugProtoBuf
@@ -63,6 +65,7 @@ import org.jetbrains.kotlin.utils.JsMetadataVersion
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadata
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils
 import java.io.*
+import java.lang.Boolean.getBoolean
 import java.nio.charset.Charset
 import java.util.regex.Pattern
 
@@ -84,9 +87,11 @@ abstract class BasicBoxTest(
     protected open fun getOutputPostfixFile(testFilePath: String): File? = null
 
     protected open val runMinifierByDefault: Boolean = false
-    protected open val skipMinification = System.getProperty("kotlin.js.skipMinificationTest", "false")!!.toBoolean()
+    protected open val skipMinification = getBoolean("kotlin.js.skipMinificationTest")
 
     protected open val incrementalCompilationChecksEnabled = true
+
+    protected open val testChecker get() = if (runTestInNashorn) NashornJsTestChecker else V8JsTestChecker
 
     fun doTest(filePath: String) {
         doTest(filePath, "OK", MainCallParameters.noCall())
@@ -121,6 +126,10 @@ abstract class BasicBoxTest(
                     .map { it.module }.distinct()
                     .map { it.name to it }.toMap()
 
+            fun TestModule.allTransitiveDependencies(): Set<String> {
+                return dependencies.toSet() + dependencies.flatMap { modules[it]!!.allTransitiveDependencies() }
+            }
+
             val orderedModules = DFS.topologicalOrder(modules.values) { module -> module.dependencies.mapNotNull { modules[it] } }
 
             val testPackage = testFactory.testPackage
@@ -131,12 +140,13 @@ abstract class BasicBoxTest(
 
             val generatedJsFiles = orderedModules.asReversed().mapNotNull { module ->
                 val dependencies = module.dependencies.map { modules[it]?.outputFileName(outputDir) + ".meta.js" }
+                val allDependencies = module.allTransitiveDependencies().map { modules[it]?.outputFileName(outputDir) + ".meta.js" }
                 val friends = module.friends.map { modules[it]?.outputFileName(outputDir) + ".meta.js" }
 
                 val outputFileName = module.outputFileName(outputDir) + ".js"
                 val isMainModule = mainModuleName == module.name
                 generateJavaScriptFile(
-                    file.parent, module, outputFileName, dependencies, friends, modules.size > 1,
+                    file.parent, module, outputFileName, dependencies, allDependencies, friends, modules.size > 1,
                     !SKIP_SOURCEMAP_REMAPPING.matcher(fileContent).find(),
                     outputPrefixFile, outputPostfixFile, actualMainCallParameters, testPackage, testFunction,
                     runtimeType, isMainModule
@@ -257,7 +267,7 @@ abstract class BasicBoxTest(
         withModuleSystem: Boolean,
         runtime: JsIrTestRuntime
     ) {
-        NashornJsTestChecker.check(jsFiles, testModuleName, testPackage, testFunction, expectedResult, withModuleSystem)
+        testChecker.check(jsFiles, testModuleName, testPackage, testFunction, expectedResult, withModuleSystem)
     }
 
     protected open fun performAdditionalChecks(generatedJsFiles: List<String>, outputPrefixFile: File?, outputPostfixFile: File?) {}
@@ -314,6 +324,7 @@ abstract class BasicBoxTest(
         module: TestModule,
         outputFileName: String,
         dependencies: List<String>,
+        allDependencies: List<String>,
         friends: List<String>,
         multiModule: Boolean,
         remap: Boolean,
@@ -339,7 +350,7 @@ abstract class BasicBoxTest(
         val psiFiles = createPsiFiles(allSourceFiles.sortedBy { it.canonicalPath }.map { it.canonicalPath })
 
         val sourceDirs = (testFiles + additionalFiles).map { File(it).parent }.distinct()
-        val config = createConfig(sourceDirs, module, dependencies, friends, multiModule, incrementalData = null)
+        val config = createConfig(sourceDirs, module, dependencies, allDependencies, friends, multiModule, incrementalData = null)
         val outputFile = File(outputFileName)
 
         val incrementalData = IncrementalData()
@@ -350,7 +361,7 @@ abstract class BasicBoxTest(
 
         if (incrementalCompilationChecksEnabled && module.hasFilesToRecompile) {
             checkIncrementalCompilation(
-                sourceDirs, module, kotlinFiles, dependencies, friends, multiModule, remap,
+                sourceDirs, module, kotlinFiles, dependencies, allDependencies, friends, multiModule, remap,
                 outputFile, outputPrefixFile, outputPostfixFile, mainCallParameters, incrementalData, testPackage, testFunction, runtime
             )
         }
@@ -361,6 +372,7 @@ abstract class BasicBoxTest(
         module: TestModule,
         kotlinFiles: List<TestFile>,
         dependencies: List<String>,
+        allDependencies: List<String>,
         friends: List<String>,
         multiModule: Boolean,
         remap: Boolean,
@@ -388,7 +400,7 @@ abstract class BasicBoxTest(
                 .sortedBy { it.canonicalPath }
                 .map { sourceToTranslationUnit[it]!! }
 
-        val recompiledConfig = createConfig(sourceDirs, module, dependencies, friends, multiModule, incrementalData)
+        val recompiledConfig = createConfig(sourceDirs, module, dependencies, allDependencies, friends, multiModule, incrementalData)
         val recompiledOutputFile = File(outputFile.parentFile, outputFile.nameWithoutExtension + "-recompiled.js")
 
         translateFiles(
@@ -593,7 +605,7 @@ abstract class BasicBoxTest(
     private fun createPsiFiles(fileNames: List<String>): List<KtFile> = fileNames.map(this::createPsiFile)
 
     private fun createConfig(
-            sourceDirs: List<String>, module: TestModule, dependencies: List<String>, friends: List<String>,
+            sourceDirs: List<String>, module: TestModule, dependencies: List<String>, allDependencies: List<String>, friends: List<String>,
             multiModule: Boolean, incrementalData: IncrementalData?
     ): JsConfig {
         val configuration = environment.configuration.copy()
@@ -603,7 +615,14 @@ abstract class BasicBoxTest(
             configuration.languageVersionSettings = languageVersionSettings
         }
 
-        configuration.put(JSConfigurationKeys.LIBRARIES, JsConfig.JS_STDLIB + JsConfig.JS_KOTLIN_TEST + dependencies)
+        val libraries = when (targetBackend) {
+            TargetBackend.JS_IR -> dependencies
+            TargetBackend.JS -> JsConfig.JS_STDLIB + JsConfig.JS_KOTLIN_TEST + dependencies
+            else -> error("Unsupported target backend: $targetBackend")
+        }
+
+        configuration.put(JSConfigurationKeys.LIBRARIES, libraries)
+        configuration.put(JSConfigurationKeys.TRANSITIVE_LIBRARIES, allDependencies)
         configuration.put(JSConfigurationKeys.FRIEND_PATHS, friends)
 
         configuration.put(CommonConfigurationKeys.MODULE_NAME, module.name.removeSuffix(OLD_MODULE_SUFFIX))
@@ -671,7 +690,7 @@ abstract class BasicBoxTest(
         val result = engineForMinifier.runAndRestoreContext {
             runList.forEach(this::loadFile)
             overrideAsserter()
-            eval(NashornJsTestChecker.SETUP_KOTLIN_OUTPUT)
+            eval<String>(SETUP_KOTLIN_OUTPUT)
             runTestFunction(testModuleName, testPackage, testFunction, withModuleSystem)
         }
         TestCase.assertEquals(expectedResult, result)
@@ -811,13 +830,15 @@ abstract class BasicBoxTest(
         private val CALL_MAIN_PATTERN = Pattern.compile("^// *CALL_MAIN *$", Pattern.MULTILINE)
         private val KJS_WITH_FULL_RUNTIME = Pattern.compile("^// *KJS_WITH_FULL_RUNTIME *\$", Pattern.MULTILINE)
 
+        @JvmStatic
+        protected val runTestInNashorn = getBoolean("kotlin.js.useNashorn")
+
         val TEST_MODULE = "JS_TESTS"
         private val DEFAULT_MODULE = "main"
         private val TEST_FUNCTION = "box"
         private val OLD_MODULE_SUFFIX = "-old"
 
         const val KOTLIN_TEST_INTERNAL = "\$kotlin_test_internal\$"
-
-        private val engineForMinifier = createScriptEngine()
+        private val engineForMinifier = if (runTestInNashorn) ScriptEngineNashorn() else ScriptEngineV8Lazy()
     }
 }

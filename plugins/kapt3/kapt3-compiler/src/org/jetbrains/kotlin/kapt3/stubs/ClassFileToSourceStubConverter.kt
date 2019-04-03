@@ -264,10 +264,12 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
             }
 
             val isCallableImport = importedReference is CallableDescriptor
+            val isEnumEntry = (importedReference as? ClassDescriptor)?.kind == ClassKind.ENUM_ENTRY
             val isAllUnderClassifierImport = importDirective.isAllUnder && importedReference is ClassifierDescriptor
 
-            if (isCallableImport || isAllUnderClassifierImport)
+            if (isCallableImport || isEnumEntry || isAllUnderClassifierImport) {
                 continue@loop
+            }
 
             val importedExpr = treeMaker.FqName(importedFqName.asString())
 
@@ -425,6 +427,11 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
         }
 
         val declaration = kaptContext.origins[clazz]?.element as? KtClassOrObject ?: return defaultSuperTypes
+        val declarationDescriptor = kaptContext.bindingContext[BindingContext.CLASS, declaration] ?: return defaultSuperTypes
+
+        if (typeMapper.mapType(declarationDescriptor) != Type.getObjectType(clazz.name)) {
+            return defaultSuperTypes
+        }
 
         val (superClass, superInterfaces) = partitionSuperTypes(declaration) ?: return defaultSuperTypes
 
@@ -462,36 +469,49 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
             .takeIf { it.isNotEmpty() }
             ?: return Pair(null, emptyList())
 
-        val resolvedSuperTypes = superTypeEntries
-            .map { it to kaptContext.bindingContext[BindingContext.TYPE, it.typeReference] }
+        val classEntries = mutableListOf<KtSuperTypeListEntry>()
+        val interfaceEntries = mutableListOf<KtSuperTypeListEntry>()
+        val otherEntries = mutableListOf<KtSuperTypeListEntry>()
 
-        val (resolvedAsClasses, otherSuperTypes) = resolvedSuperTypes
-            .partition {
-                it.second?.isError == false
-                        && (it.second?.constructor?.declarationDescriptor as? ClassDescriptor)?.kind == ClassKind.CLASS
+        for (entry in superTypeEntries) {
+            val type = kaptContext.bindingContext[BindingContext.TYPE, entry.typeReference]
+            val classDescriptor = type?.constructor?.declarationDescriptor as? ClassDescriptor
+
+            if (type != null && !type.isError && classDescriptor != null) {
+                val container = if (classDescriptor.kind == ClassKind.INTERFACE) interfaceEntries else classEntries
+                container += entry
+                continue
             }
 
-        if (resolvedAsClasses.size > 1) {
+            if (entry is KtSuperTypeCallEntry) {
+                classEntries += entry
+                continue
+            }
+
+            otherEntries += entry
+        }
+
+        for (entry in otherEntries) {
+            if (classEntries.isEmpty()) {
+                if (declaration is KtClass && !declaration.isInterface() && declaration.hasOnlySecondaryConstructors()) {
+                    classEntries += entry
+                    continue
+                }
+            }
+
+            interfaceEntries += entry
+        }
+
+        if (classEntries.size > 1) {
             // Error in user code, several entries were resolved to classes
             return null
-        } else if (resolvedAsClasses.size == 1) {
-            return Pair(resolvedAsClasses.single().first.typeReference, otherSuperTypes.mapNotNull { it.first.typeReference })
         }
 
-        val (withParenthesis, withoutParenthesis) = superTypeEntries.partition { it is KtSuperTypeCallEntry }
+        return Pair(classEntries.firstOrNull()?.typeReference, interfaceEntries.mapNotNull { it.typeReference })
+    }
 
-        if (withParenthesis.size > 1) {
-            // Error in user code, several entries with super constructor call
-            return null
-        } else if (withParenthesis.size == 1) {
-            return Pair(withParenthesis.single().typeReference, withoutParenthesis.mapNotNull { it.typeReference })
-        }
-
-        if (declaration is KtClass && declaration.primaryConstructor == null && declaration.secondaryConstructors.isNotEmpty()) {
-            return Pair(superTypeEntries.first().typeReference, superTypeEntries.drop(1).mapNotNull { it.typeReference })
-        }
-
-        return Pair(null, superTypeEntries.mapNotNull { it.typeReference })
+    private fun KtClass.hasOnlySecondaryConstructors(): Boolean {
+        return primaryConstructor == null && secondaryConstructors.isNotEmpty()
     }
 
     private tailrec fun checkIfValidTypeName(containingClass: ClassNode, type: Type): Boolean {
@@ -615,15 +635,30 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
                 ifNonError = { signatureParser.parseFieldSignature(field.signature, treeMaker.Type(type)) }
             )
 
-        val value = field.value
-
-        val initializer = explicitInitializer
-            ?: convertValueOfPrimitiveTypeOrString(value)
-            ?: if (isFinal(field.access)) convertLiteralExpression(getDefaultValue(type)) else null
-
         lineMappings.registerField(containingClass, field)
 
+        val initializer = explicitInitializer ?: convertPropertyInitializer(field)
         return treeMaker.VarDef(modifiers, treeMaker.name(name), typeExpression, initializer).keepKdocComments(field)
+    }
+
+    private fun convertPropertyInitializer(field: FieldNode): JCExpression? {
+        val value = field.value
+
+        if (value != null) {
+            val propertyInitializer = (kaptContext.origins[field]?.element as? KtProperty)?.initializer
+            if (propertyInitializer != null) {
+                return convertConstantValueArguments(value, listOf(propertyInitializer))
+            }
+
+            return convertValueOfPrimitiveTypeOrString(value)
+        }
+
+        if (isFinal(field.access)) {
+            val type = Type.getType(field.desc)
+            return convertLiteralExpression(getDefaultValue(type))
+        }
+
+        return null
     }
 
     private fun convertMethod(
@@ -798,7 +833,15 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
                     else -> null
                 }
             },
-            ifNonError = { genericSignature.returnType }
+            ifNonError = ifNonError@ {
+                if (descriptor is PropertyDescriptor) {
+                    val containingClass = descriptor.containingDeclaration
+                    if (containingClass is ClassDescriptor && containingClass.kind == ClassKind.ANNOTATION_CLASS) {
+                        return@ifNonError jcReturnType
+                    }
+                }
+                genericSignature.returnType
+            }
         )
 
         return Pair(genericSignature, returnType)
@@ -959,12 +1002,12 @@ class ClassFileToSourceStubConverter(val kaptContext: KaptContextForStubGenerati
 
     private fun convertAnnotationArgumentWithName(constantValue: Any?, value: ResolvedValueArgument?, name: String): JCExpression? {
         if (!isValidIdentifier(name)) return null
-        val expr = convertAnnotationArgument(constantValue, value) ?: return null
+        val args = value?.arguments?.mapNotNull { it.getArgumentExpression() } ?: emptyList()
+        val expr = convertConstantValueArguments(constantValue, args) ?: return null
         return treeMaker.Assign(treeMaker.SimpleName(name), expr)
     }
 
-    private fun convertAnnotationArgument(constantValue: Any?, value: ResolvedValueArgument?): JCExpression? {
-        val args = value?.arguments?.mapNotNull { it.getArgumentExpression() } ?: emptyList()
+    private fun convertConstantValueArguments(constantValue: Any?, args: List<KtExpression>): JCExpression? {
         val singleArg = args.singleOrNull()
 
         if (constantValue.isOfPrimitiveType()) {

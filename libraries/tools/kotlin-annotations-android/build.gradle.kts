@@ -22,9 +22,14 @@ sourceSets {
     }
 }
 
+dependencies {
+    compile(kotlinBuiltins())
+}
+
+publish()
+
 sourcesJar()
 javadocJar()
 runtimeJar()
 dist()
 
-publish()

@@ -20,7 +20,6 @@ import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.api.AndroidSourceSet
 import com.android.build.gradle.api.BaseVariant
 import com.android.build.gradle.api.TestVariant
-import com.android.build.gradle.internal.variant.BaseVariantData
 import com.android.build.gradle.internal.variant.TestVariantData
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -32,7 +31,7 @@ import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 import org.jetbrains.kotlin.gradle.model.builder.KotlinAndroidExtensionModelBuilder
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinAndroidTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.multiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.multiplatformExtensionOrNull
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.w3c.dom.Document
 import java.io.File
@@ -44,18 +43,12 @@ import javax.xml.parsers.DocumentBuilderFactory
 class AndroidExtensionsSubpluginIndicator @Inject internal constructor(private val registry: ToolingModelBuilderRegistry) :
     Plugin<Project> {
     override fun apply(project: Project) {
-        val extension = project.extensions.create("androidExtensions", AndroidExtensionsExtension::class.java)
-
-        extension.setEvaluatedHandler { evaluatedExtension ->
-            if (evaluatedExtension.isExperimental) {
-                addAndroidExtensionsRuntimeIfNeeded(project)
-            }
-        }
-
+        project.extensions.create("androidExtensions", AndroidExtensionsExtension::class.java)
+        addAndroidExtensionsRuntime(project)
         registry.register(KotlinAndroidExtensionModelBuilder())
     }
 
-    private fun addAndroidExtensionsRuntimeIfNeeded(project: Project) {
+    private fun addAndroidExtensionsRuntime(project: Project) {
         val kotlinPluginVersion = project.getKotlinPluginVersion() ?: run {
             project.logger.error("Kotlin plugin should be enabled before 'kotlin-android-extensions'")
             return
@@ -93,7 +86,7 @@ class AndroidSubplugin : KotlinGradleSubplugin<KotlinCompile> {
         if (project.plugins.findPlugin(AndroidExtensionsSubpluginIndicator::class.java) == null) {
             return false
         }
-        project.multiplatformExtension?.let { kotlin ->
+        project.multiplatformExtensionOrNull?.let { kotlin ->
             return kotlin.targets.any { target ->
                 target is KotlinAndroidTarget && target.compilations.any { it.compileKotlinTaskName == task.name }
             }
@@ -123,7 +116,8 @@ class AndroidSubplugin : KotlinGradleSubplugin<KotlinCompile> {
         val sourceSets = androidExtension.sourceSets
 
         val pluginOptions = arrayListOf<SubpluginOption>()
-        pluginOptions += SubpluginOption("features", AndroidExtensionsFeature.VIEWS.featureName)
+        pluginOptions += SubpluginOption("features",
+                                         AndroidExtensionsFeature.parseFeatures(androidExtensionsExtension.features).joinToString(",") { it.featureName })
 
         val mainSourceSet = sourceSets.getByName("main")
         val manifestFile = mainSourceSet.manifest.srcFile

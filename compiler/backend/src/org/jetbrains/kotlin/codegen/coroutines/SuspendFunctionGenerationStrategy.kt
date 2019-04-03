@@ -1,11 +1,10 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.coroutines
 
-import org.jetbrains.kotlin.backend.common.CodegenUtil
 import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.codegen.FunctionGenerationStrategy
@@ -54,7 +53,7 @@ open class SuspendFunctionGenerationStrategy(
     override fun wrapMethodVisitor(mv: MethodVisitor, access: Int, name: String, desc: String): MethodVisitor {
         if (access and Opcodes.ACC_ABSTRACT != 0) return mv
 
-        if (state.bindingContext[CodegenBinding.CAPTURES_CROSSINLINE_SUSPEND_LAMBDA, originalSuspendDescriptor] == true) {
+        if (state.bindingContext[CodegenBinding.CAPTURES_CROSSINLINE_LAMBDA, originalSuspendDescriptor] == true) {
             return AddConstructorCallForCoroutineRegeneration(
                 mv, access, name, desc, null, null, this::classBuilderForCoroutineState,
                 containingClassInternalName,
@@ -71,8 +70,7 @@ open class SuspendFunctionGenerationStrategy(
             shouldPreserveClassInitialization = constructorCallNormalizationMode.shouldPreserveClassInitialization,
             needDispatchReceiver = originalSuspendDescriptor.dispatchReceiverParameter != null,
             internalNameForDispatchReceiver = containingClassInternalNameOrNull(),
-            languageVersionSettings = languageVersionSettings,
-            sourceFile = declaration.containingFile.name
+            languageVersionSettings = languageVersionSettings
         )
     }
 
