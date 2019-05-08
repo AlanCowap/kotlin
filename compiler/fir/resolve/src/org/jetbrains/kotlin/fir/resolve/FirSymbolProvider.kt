@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.resolve
@@ -30,6 +30,11 @@ interface FirSymbolProvider {
     fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<ConeCallableSymbol>
 
     fun getClassDeclaredMemberScope(classId: ClassId): FirScope?
+    fun getClassUseSiteMemberScope(
+        classId: ClassId,
+        useSiteSession: FirSession,
+        scopeSession: ScopeSession
+    ): FirScope?
 
     fun getAllCallableNamesInPackage(fqName: FqName): Set<Name> = emptySet()
     fun getClassNamesInPackage(fqName: FqName): Set<Name> = emptySet()
@@ -61,10 +66,3 @@ fun FirSymbolProvider.getClassDeclaredCallableSymbols(classId: ClassId, name: Na
     return result
 }
 
-fun FirSymbolProvider.getCallableSymbols(callableId: CallableId): List<ConeCallableSymbol> {
-    if (callableId.classId != null) {
-        return getClassDeclaredCallableSymbols(callableId.classId!!, callableId.callableName)
-    }
-
-    return getTopLevelCallableSymbols(callableId.packageName, callableId.callableName)
-}

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmName("JSStdlibLinker")
@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.js.sourceMap.SourceMap3Builder
 import org.jetbrains.kotlin.js.util.TextOutputImpl
 import java.io.File
 import java.io.StringReader
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     val outputFile = File(args[0])
@@ -55,7 +56,7 @@ private fun mergeStdlibParts(outputFile: File, wrapperFile: File, baseDir: File,
             when (sourceMapParse) {
                 is SourceMapError -> {
                     System.err.println("Error parsing source map file $sourceMapFile: ${sourceMapParse.message}")
-                    System.exit(1)
+                    exitProcess(1)
                 }
                 is SourceMapSuccess -> {
                     val sourceMap = sourceMapParse.value

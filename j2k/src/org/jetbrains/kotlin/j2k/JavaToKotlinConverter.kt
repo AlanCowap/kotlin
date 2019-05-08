@@ -16,23 +16,16 @@
 
 package org.jetbrains.kotlin.j2k
 
-import com.intellij.codeInsight.documentation.DocumentationManager
 import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.progress.*
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Computable
 import com.intellij.psi.*
 import com.intellij.psi.impl.source.DummyHolder
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.jetbrains.kotlin.idea.KotlinLanguage
-import org.jetbrains.kotlin.idea.core.util.EDT
 import org.jetbrains.kotlin.j2k.ast.Element
 import org.jetbrains.kotlin.j2k.usageProcessing.ExternalCodeProcessor
 import org.jetbrains.kotlin.j2k.usageProcessing.UsageProcessing
@@ -42,14 +35,12 @@ import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.psiUtil.isAncestor
 import org.jetbrains.kotlin.psi.psiUtil.parentsWithSelf
 import java.util.*
-import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
-import org.jetbrains.kotlin.idea.util.application.runWriteAction
 
 
 interface PostProcessor {
     fun insertImport(file: KtFile, fqName: FqName)
 
-    fun doAdditionalProcessing(file: KtFile, rangeMarker: RangeMarker?)
+    fun doAdditionalProcessing(file: KtFile, converterContext: ConverterContext?, rangeMarker: RangeMarker?)
 }
 
 enum class ParseContext {
@@ -64,46 +55,58 @@ interface ExternalCodeProcessing {
 
 data class ElementResult(val text: String, val importsToAdd: Set<FqName>, val parseContext: ParseContext)
 
-data class Result(val results: List<ElementResult?>, val externalCodeProcessing: ExternalCodeProcessing?)
+data class Result(
+    val results: List<ElementResult?>,
+    val externalCodeProcessing: ExternalCodeProcessing?,
+    val converterContext: ConverterContext?
+)
 
 data class FilesResult(val results: List<String>, val externalCodeProcessing: ExternalCodeProcessing?)
 
+interface ConverterContext
 
-abstract class JavaToKotlinConverter(private val project: Project) {
+abstract class JavaToKotlinConverter {
     protected abstract fun elementsToKotlin(inputElements: List<PsiElement>, processor: WithProgressProcessor): Result
-    protected abstract fun createDummyKtFile(text: String, project: Project, context: PsiElement): KtFile
-
-    private val LOG = Logger.getInstance("#org.jetbrains.kotlin.j2k.JavaToKotlinConverter")
-
-    fun filesToKotlin(
+    abstract fun filesToKotlin(
         files: List<PsiJavaFile>,
         postProcessor: PostProcessor,
         progress: ProgressIndicator = EmptyProgressIndicator()
+    ): FilesResult
+
+    fun elementsToKotlin(inputElements: List<PsiElement>): Result {
+        return elementsToKotlin(inputElements, WithProgressProcessor.DEFAULT)
+    }
+}
+
+class OldJavaToKotlinConverter(
+    private val project: Project,
+    private val settings: ConverterSettings,
+    private val services: JavaToKotlinConverterServices
+) : JavaToKotlinConverter() {
+
+    private val LOG = Logger.getInstance("#org.jetbrains.kotlin.j2k.JavaToKotlinConverter")
+
+    override fun filesToKotlin(
+        files: List<PsiJavaFile>,
+        postProcessor: PostProcessor,
+        progress: ProgressIndicator
     ): FilesResult {
         val withProgressProcessor = WithProgressProcessor(progress, files)
         val (results, externalCodeProcessing) = ApplicationManager.getApplication().runReadAction(Computable {
             elementsToKotlin(files, withProgressProcessor)
         })
 
+
         val texts = withProgressProcessor.processItems(0.5, results.withIndex()) { pair ->
             val (i, result) = pair
             try {
                 val kotlinFile = ApplicationManager.getApplication().runReadAction(Computable {
-                    createDummyKtFile(result!!.text, project, files[i])
+                    KtPsiFactory(project).createAnalyzableFile("dummy.kt", result!!.text, files[i])
                 })
 
+                result!!.importsToAdd.forEach { postProcessor.insertImport(kotlinFile, it) }
 
-                CommandProcessor.getInstance().runUndoTransparentAction {
-                    runBlocking(EDT.ModalityStateElement(ModalityState.defaultModalityState())) {
-                        withContext(EDT) {
-                            result!!.importsToAdd.forEach {
-                                postProcessor.insertImport(kotlinFile, it)
-                            }
-                        }
-                    }
-                }
-
-                AfterConversionPass(project, postProcessor).run(kotlinFile, range = null)
+                AfterConversionPass(project, postProcessor).run(kotlinFile, converterContext = null, range = null)
 
                 kotlinFile.text
             } catch (e: ProcessCanceledException) {
@@ -116,20 +119,6 @@ abstract class JavaToKotlinConverter(private val project: Project) {
 
         return FilesResult(texts, externalCodeProcessing)
     }
-
-    fun elementsToKotlin(inputElements: List<PsiElement>): Result {
-        return elementsToKotlin(inputElements, WithProgressProcessor.DEFAULT)
-    }
-}
-
-class OldJavaToKotlinConverter(
-    project: Project,
-    private val settings: ConverterSettings,
-    private val services: JavaToKotlinConverterServices
-) : JavaToKotlinConverter(project) {
-
-    override fun createDummyKtFile(text: String, project: Project, context: PsiElement): KtFile =
-        KtPsiFactory(project).createAnalyzableFile("dummy.kt", text, context)
 
     override fun elementsToKotlin(inputElements: List<PsiElement>, processor: WithProgressProcessor): Result {
         try {
@@ -156,7 +145,7 @@ class OldJavaToKotlinConverter(
 
             val externalCodeProcessing = buildExternalCodeProcessing(usageProcessings, ::inConversionScope)
 
-            return Result(results, externalCodeProcessing)
+            return Result(results, externalCodeProcessing, null)
         } catch (e: ElementCreationStackTraceRequiredException) {
             // if we got this exception then we need to turn element creation stack traces on to get better diagnostic
             Element.saveCreationStacktraces = true
@@ -346,8 +335,6 @@ open class DelegatingProgressIndicator : WrappedProgressIndicator, StandardProgr
     }
 
     constructor() {
-        // BUNCH: 181
-        @Suppress("IncompatibleAPI")
         val indicator: ProgressIndicator? = ProgressManager.getInstance().progressIndicator
         delegate = indicator ?: EmptyProgressIndicator()
     }

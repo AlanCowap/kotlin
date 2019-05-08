@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.inference.components
@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.resolve.calls.inference.components
 import org.jetbrains.kotlin.types.AbstractNullabilityChecker
 import org.jetbrains.kotlin.types.AbstractTypeChecker
 import org.jetbrains.kotlin.types.AbstractTypeCheckerContext
-import org.jetbrains.kotlin.types.checker.*
 import org.jetbrains.kotlin.types.model.*
 
 abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheckerContext(), TypeSystemInferenceExtensionContext {
@@ -45,8 +44,8 @@ abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheck
         val hasExact = subType.isTypeVariableWithExact() || superType.isTypeVariableWithExact()
 
         // we should strip annotation's because we have incorporation operation and they should be not affected
-        val mySubType = if (hasExact) subType.removeAnnotations() else subType
-        val mySuperType = if (hasExact) superType.removeAnnotations() else superType
+        val mySubType = if (hasExact) subType.removeExactAnnotation() else subType
+        val mySuperType = if (hasExact) superType.removeExactAnnotation() else superType
 
         val result = internalAddSubtypeConstraint(mySubType, mySuperType)
         if (!hasExact) return result
@@ -75,7 +74,7 @@ abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheck
         if (subType.anyBound(this::isMyTypeVariable)) {
             return simplifyUpperConstraint(subType, superType) && (answer ?: true)
         } else {
-            extractTypeVariableForSubtype(subType)?.let {
+            extractTypeVariableForSubtype(subType, superType)?.let {
                 return simplifyUpperConstraint(it, superType) && (answer ?: true)
             }
 
@@ -84,11 +83,23 @@ abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheck
     }
 
     // extract type variable only from type like Captured(out T)
-    private fun extractTypeVariableForSubtype(type: KotlinTypeMarker): KotlinTypeMarker? {
+    private fun extractTypeVariableForSubtype(subType: KotlinTypeMarker, superType: KotlinTypeMarker): KotlinTypeMarker? {
 
-        val type = type.asSimpleType()?.asCapturedType() ?: return null
+        val typeMarker = subType.asSimpleType()?.asCapturedType() ?: return null
 
-        val projection = type.typeConstructorProjection()
+        val projection = typeMarker.typeConstructorProjection()
+        if (projection.isStarProjection()) return null
+        if (projection.getVariance() == TypeVariance.IN) {
+            val type = projection.getType().asSimpleType() ?: return null
+            if (isMyTypeVariable(type)) {
+                simplifyLowerConstraint(type, superType)
+                if (isMyTypeVariable(superType.asSimpleType() ?: return null)) {
+                    addLowerConstraint(superType.typeConstructor(), nullableAnyType())
+                }
+            }
+            return null
+        }
+
         return if (projection.getVariance() == TypeVariance.OUT)
             projection.getType().takeIf { it is SimpleTypeMarker && isMyTypeVariable(it) }?.asSimpleType()
         else

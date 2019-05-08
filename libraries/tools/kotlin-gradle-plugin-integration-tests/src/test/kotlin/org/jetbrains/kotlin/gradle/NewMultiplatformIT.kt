@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.gradle
 
@@ -1075,7 +1075,7 @@ class NewMultiplatformIT : BaseGradleIT() {
     @Test
     fun testNativeTests() = with(Project("new-mpp-native-tests", gradleVersion)) {
         val testTasks = listOf("macos64Test", "linux64Test", "mingw64Test")
-        val hostTestTask = ":${nativeHostTargetName}Test"
+        val hostTestTask = "${nativeHostTargetName}Test"
         build("tasks") {
             assertSuccessful()
             println(output)
@@ -1086,7 +1086,8 @@ class NewMultiplatformIT : BaseGradleIT() {
         }
         build("check") {
             assertSuccessful()
-            assertTasksExecuted(hostTestTask)
+            assertTasksExecuted(":$hostTestTask")
+            assertTestResults("testProject/new-mpp-native-tests/TEST-TestKt.xml", hostTestTask)
         }
     }
 

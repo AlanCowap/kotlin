@@ -29,15 +29,6 @@ import org.jetbrains.kotlin.ir.types.impl.IrUninitializedType
 
 interface IrDeserializer {
     fun findDeserializedDeclaration(symbol: IrSymbol): IrDeclaration?
-    // We need a separate method for properties, because properties
-    // are treated differently in the SymbolTable.
-    // See SymbolTable.propertyTable and SymbolTable.referenceProperty.
-    // There was an attempt to solve this asymmetry in the symbol table
-    // using property symbols, but it was not successful.
-    // For now we have to live with a special treatment of properties.
-    // TODO: eventually get rid of this asymmetry.
-    fun findDeserializedDeclaration(propertyDescriptor: PropertyDescriptor): IrProperty?
-
     fun declareForwardDeclarations()
 }
 
@@ -334,7 +325,7 @@ open class SymbolTable : ReferenceSymbolTable {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         descriptor: PropertyDescriptor,
-        isDelegated: Boolean = descriptor.isDelegated,
+        @Suppress("DEPRECATION") isDelegated: Boolean = descriptor.isDelegated,
         propertyFactory: (IrPropertySymbol) -> IrProperty = { symbol ->
             IrPropertyImpl(startOffset, endOffset, origin, symbol, isDelegated = isDelegated).apply {
                 metadata = MetadataSource.Property(symbol.descriptor)
@@ -413,12 +404,15 @@ open class SymbolTable : ReferenceSymbolTable {
         origin: IrDeclarationOrigin,
         descriptor: ParameterDescriptor,
         type: IrType,
-        varargElementType: IrType? = null
+        varargElementType: IrType? = null,
+        valueParameterFactory: (IrValueParameterSymbol) -> IrValueParameter = {
+            IrValueParameterImpl(startOffset, endOffset, origin, it, type, varargElementType)
+        }
     ): IrValueParameter =
         valueParameterSymbolTable.declareLocal(
             descriptor,
             { IrValueParameterSymbolImpl(descriptor) },
-            { IrValueParameterImpl(startOffset, endOffset, origin, it, type, varargElementType) }
+            valueParameterFactory
         )
 
     fun introduceValueParameter(irValueParameter: IrValueParameter) {
@@ -442,12 +436,16 @@ open class SymbolTable : ReferenceSymbolTable {
         endOffset: Int,
         origin: IrDeclarationOrigin,
         descriptor: VariableDescriptor,
-        type: IrType
+        type: IrType,
+        variableFactory: (IrVariableSymbol) -> IrVariable = {
+            IrVariableImpl(startOffset, endOffset, origin, it, type)
+        }
+
     ): IrVariable =
         variableSymbolTable.declareLocal(
             descriptor,
             { IrVariableSymbolImpl(descriptor) },
-            { IrVariableImpl(startOffset, endOffset, origin, it, type) }
+            variableFactory
         )
 
     fun declareVariable(

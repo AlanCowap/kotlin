@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.ir
@@ -54,13 +54,13 @@ abstract class AbstractIrLineNumberTest : AbstractLineNumberTest() {
 
             override fun visitLabel(label: Label) {
                 if (lastLabel != null && !labels2LineNumbers.containsKey(lastLabel) && lastLine >= 0) {
-                    labels2LineNumbers[lastLabel!!] = Integer.toString(lastLine) // Inherited line number
+                    labels2LineNumbers[lastLabel!!] = lastLine.toString() // Inherited line number
                 }
                 lastLabel = label
             }
 
             override fun visitLineNumber(line: Int, start: Label) {
-                labels2LineNumbers[start] = Integer.toString(line)
+                labels2LineNumbers[start] = line.toString()
                 lastLine = line
             }
         }

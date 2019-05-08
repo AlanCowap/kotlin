@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower.calls
@@ -10,12 +10,13 @@ import org.jetbrains.kotlin.ir.util.irCall
 import org.jetbrains.kotlin.ir.backend.js.utils.Namer
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
 import org.jetbrains.kotlin.name.Name
 
 
 class ReflectionCallsTransformer(private val context: JsIrBackendContext) : CallsTransformer {
-    private val nameToTransformer: Map<Name, (IrCall) -> IrExpression>
+    private val nameToTransformer: Map<Name, (IrFunctionAccessExpression) -> IrExpression>
 
     init {
         nameToTransformer = mutableMapOf()
@@ -45,7 +46,7 @@ class ReflectionCallsTransformer(private val context: JsIrBackendContext) : Call
         }
     }
 
-    override fun transformCall(call: IrCall): IrExpression {
+    override fun transformFunctionAccess(call: IrFunctionAccessExpression): IrExpression {
         val symbol = call.symbol
         nameToTransformer[symbol.owner.name]?.let {
             return it(call)

@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.descriptors
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
@@ -17,7 +18,6 @@ import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
-import org.jetbrains.kotlin.ir.types.toIrType
 import org.jetbrains.kotlin.ir.types.withHasQuestionMark
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.ir.util.TypeTranslator
@@ -181,8 +181,19 @@ class IrBuiltIns(
 
     // TODO switch to IrType
     val primitiveTypes = listOf(bool, char, byte, short, int, long, float, double)
-    val primitiveTypesWithComparisons = listOf(int, long, float, double)
+    val primitiveTypesWithComparisons = listOf(char, byte, short, int, long, float, double)
     val primitiveFloatingPointTypes = listOf(float, double)
+
+    val primitiveTypeToIrType = mapOf(
+        PrimitiveType.BOOLEAN to booleanType,
+        PrimitiveType.CHAR to charType,
+        PrimitiveType.BYTE to byteType,
+        PrimitiveType.SHORT to shortType,
+        PrimitiveType.INT to intType,
+        PrimitiveType.FLOAT to floatType,
+        PrimitiveType.LONG to longType,
+        PrimitiveType.DOUBLE to doubleType
+    )
 
     val lessFunByOperandType = primitiveTypesWithComparisons.defineComparisonOperatorForEachType(OperatorNames.LESS)
     val lessOrEqualFunByOperandType = primitiveTypesWithComparisons.defineComparisonOperatorForEachType(OperatorNames.LESS_OR_EQUAL)

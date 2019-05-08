@@ -1,4 +1,6 @@
 public open class Class : R|test/Trait| {
+    public constructor(): R|test/Class|
+
 }
 
 public abstract interface Trait : R|kotlin/Any| {

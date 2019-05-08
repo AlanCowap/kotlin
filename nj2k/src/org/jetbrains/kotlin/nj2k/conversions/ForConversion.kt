@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.conversions
@@ -10,13 +10,13 @@ import com.intellij.util.IncorrectOperationException
 import org.jetbrains.kotlin.j2k.ReferenceSearcher
 import org.jetbrains.kotlin.j2k.hasWriteAccesses
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.nj2k.*
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
+import kotlin.math.abs
 
 
-class ForConversion(private val context: ConversionContext) : RecursiveApplicableConversionBase() {
+class ForConversion(private val context: NewJ2kConverterContext) : RecursiveApplicableConversionBase() {
     private val referenceSearcher: ReferenceSearcher
         get() = context.converter.converterServices.oldServices.referenceSearcher
 
@@ -172,22 +172,20 @@ class ForConversion(private val context: ConversionContext) : RecursiveApplicabl
             reversed -> downToExpression(
                 start,
                 convertBound(bound, if (inclusiveComparison) 0 else +1),
-                context,
-                psiContext
+                context
             )
             bound !is JKKtLiteralExpression && !inclusiveComparison ->
                 untilToExpression(
                     start,
                     convertBound(bound, 0),
-                    context,
-                    psiContext
+                    context
                 )
             else -> kotlinBinaryExpression(
                 start,
                 convertBound(bound, if (inclusiveComparison) 0 else -1),
                 JKKtSingleValueOperatorToken(KtTokens.RANGE),
                 context.symbolProvider
-            )!!
+            )
         }
     }
 
@@ -202,10 +200,10 @@ class ForConversion(private val context: ConversionContext) : RecursiveApplicabl
         val sign = if (correction > 0) KtTokens.PLUS else KtTokens.MINUS
         return kotlinBinaryExpression(
             bound,
-            JKKtLiteralExpressionImpl(Math.abs(correction).toString(), JKLiteralExpression.LiteralType.INT),
+            JKKtLiteralExpressionImpl(abs(correction).toString(), JKLiteralExpression.LiteralType.INT),
             JKKtSingleValueOperatorToken(sign),
             context.symbolProvider
-        )!!
+        )
     }
 
     private fun indicesIterationRange(
@@ -234,15 +232,17 @@ class ForConversion(private val context: ConversionContext) : RecursiveApplicabl
             ?: indicesByArrayLength(collectionSizeExpression)
             ?: return null
 
-        val psiContext = collectionSizeExpression.psi<PsiExpression>() ?: return null
         return if (reversed) {
-            val reversedSymbol = context.symbolProvider.provideDirectSymbol(
-                multiResolveFqName(ClassId.fromString("kotlin/collections/reversed"), psiContext).first()
-            ) as JKMethodSymbol
             JKQualifiedExpressionImpl(
                 indices,
                 JKKtQualifierImpl.DOT,
-                JKJavaMethodCallExpressionImpl(reversedSymbol, JKArgumentListImpl())
+                JKJavaMethodCallExpressionImpl(
+                    context.symbolProvider.provideByFqName(
+                        "kotlin/collections/reversed",
+                        multiResolve = true
+                    ),
+                    JKArgumentListImpl()
+                )
             )
         } else indices
     }
@@ -265,11 +265,13 @@ class ForConversion(private val context: ConversionContext) : RecursiveApplicabl
     }
 
     private fun toIndicesCall(javaSizeCall: JKQualifiedExpression): JKQualifiedExpression? {
-        val psiContext = javaSizeCall.psi ?: return null
-        val indiciesSymbol = context.symbolProvider.provideDirectSymbol(
-            multiResolveFqName(ClassId.fromString("kotlin/collections/indices"), psiContext).first()
-        ) as JKMultiversePropertySymbol
-        val selector = JKFieldAccessExpressionImpl(indiciesSymbol)
+        if (javaSizeCall.psi == null) return null
+        val selector = JKFieldAccessExpressionImpl(
+            context.symbolProvider.provideByFqName(
+                "kotlin/collections/indices",
+                multiResolve = true
+            )
+        )
         return JKQualifiedExpressionImpl(javaSizeCall::receiver.detached(), javaSizeCall.operator, selector)
     }
 

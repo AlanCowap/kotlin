@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.tree.impl
@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.nj2k.conversions.parentOfType
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClass
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 interface JKSymbol {
     val target: Any
@@ -52,6 +53,12 @@ abstract class JKUniverseSymbol<T : JKTreeElement> : JKNamedSymbol {
         }
 }
 
+fun JKSymbol.getDisplayName(): String {
+    if (this !is JKUniverseSymbol<*>) return fqName
+    return generateSequence(declaredIn as? JKUniverseClassSymbol) { symbol ->
+        symbol.declaredIn.safeAs<JKUniverseClassSymbol>()?.takeIf { !it.target.hasExtraModifier(ExtraModifier.INNER) }
+    }.fold(name) { acc, symbol -> "${symbol.name}.$acc" }
+}
 
 fun JKSymbol.fqNameToImport(): String? =
     when {
@@ -68,6 +75,28 @@ interface JKMethodSymbol : JKNamedSymbol {
     val parameterTypes: List<JKType>?
     val returnType: JKType?
 }
+
+val JKMethodSymbol.parameterNames: List<String>?
+    get() {
+        return when (this) {
+            is JKMultiverseFunctionSymbol -> target.valueParameters.map { it.name ?: return null }
+            is JKMultiverseMethodSymbol -> target.parameters.map { it.name ?: return null }
+            is JKUniverseMethodSymbol -> target.parameters.map { it.name.value }
+            is JKUnresolvedSymbol -> null
+            else -> null
+        }
+    }
+
+
+val JKMethodSymbol.isStatic: Boolean
+    get() = when (this) {
+        is JKMultiverseFunctionSymbol -> target.parent is KtObjectDeclaration
+        is JKMultiverseMethodSymbol -> target.hasModifierProperty(PsiModifier.STATIC)
+        is JKUniverseMethodSymbol -> target.parent?.parent?.safeAs<JKClass>()?.classKind == JKClass.ClassKind.COMPANION
+        is JKUnresolvedSymbol -> false
+        else -> false
+    }
+
 
 fun JKMethodSymbol.parameterTypesWithUnfoldedVarargs(): Sequence<JKType>? {
     val realParameterTypes = parameterTypes ?: return null
@@ -114,23 +143,6 @@ class JKMultiverseKtClassSymbol(
         get() = target.fqName?.asString() ?: name
 }
 
-fun JKClassSymbol.displayName() =
-    when (this) {
-        is JKUniverseClassSymbol ->
-            target.psi<PsiClass>()
-                ?.nameWithOuterClasses()
-                ?: name
-        is JKMultiverseClassSymbol -> target.nameWithOuterClasses()
-        else -> name
-    }
-
-fun PsiClass.nameWithOuterClasses() =
-    generateSequence(this) { it.containingClass }
-        .toList()
-        .reversed()
-        .joinToString(separator = ".") { it.name!! }
-
-
 class JKUniverseMethodSymbol(override val symbolProvider: JKSymbolProvider) : JKMethodSymbol, JKUniverseSymbol<JKMethod>() {
     override val receiverType: JKType?
         get() = (target.parent as? JKClass)?.let {
@@ -166,6 +178,7 @@ class JKMultiverseMethodSymbol(override val target: PsiMethod, private val symbo
 class JKMultiverseFunctionSymbol(override val target: KtFunction, private val symbolProvider: JKSymbolProvider) : JKMethodSymbol {
     override val receiverType: JKType?
         get() = target.receiverTypeReference?.toJK(symbolProvider)
+    @Suppress("UNCHECKED_CAST")
     override val parameterTypes: List<JKType>?
         get() = target.valueParameters.map { parameter ->
             val type = parameter.typeReference?.toJK(symbolProvider)
@@ -295,7 +308,7 @@ fun JKSymbol.deepestFqName(): String? {
         when (this) {
             is PsiMethod -> (findDeepestSuperMethods().firstOrNull() ?: this).getKotlinFqName()?.asString()
             is KtNamedFunction -> findDeepestSuperMethodsNoWrapping(this).firstOrNull()?.getKotlinFqName()?.asString()
-            is JKMethod -> psi()?.deepestFqNameForTarget()
+            is JKMethod -> psi<PsiElement>()?.deepestFqNameForTarget()
             else -> null
         }
     return target.deepestFqNameForTarget() ?: fqName

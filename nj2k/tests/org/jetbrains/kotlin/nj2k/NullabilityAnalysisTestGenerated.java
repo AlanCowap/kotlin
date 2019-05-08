@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k;
@@ -25,8 +25,8 @@ public class NullabilityAnalysisTestGenerated extends AbstractNullabilityAnalysi
         KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
     }
 
-    public void testAllFilesPresentInFileOrElement() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("nj2k/testData/fileOrElement"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+    public void testAllFilesPresentInNullabilityAnalysis() throws Exception {
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("nj2k/testData/nullabilityAnalysis"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
     }
 
     @TestMetadata("compareWithNull.kt")
@@ -34,9 +34,24 @@ public class NullabilityAnalysisTestGenerated extends AbstractNullabilityAnalysi
         runTest("nj2k/testData/nullabilityAnalysis/compareWithNull.kt");
     }
 
+    @TestMetadata("forcedNullability.kt")
+    public void testForcedNullability() throws Exception {
+        runTest("nj2k/testData/nullabilityAnalysis/forcedNullability.kt");
+    }
+
     @TestMetadata("functionTypeParameterNullability.kt")
     public void testFunctionTypeParameterNullability() throws Exception {
         runTest("nj2k/testData/nullabilityAnalysis/functionTypeParameterNullability.kt");
+    }
+
+    @TestMetadata("functions.kt")
+    public void testFunctions() throws Exception {
+        runTest("nj2k/testData/nullabilityAnalysis/functions.kt");
+    }
+
+    @TestMetadata("loops.kt")
+    public void testLoops() throws Exception {
+        runTest("nj2k/testData/nullabilityAnalysis/loops.kt");
     }
 
     @TestMetadata("nullAsAssignment.kt")
@@ -52,6 +67,11 @@ public class NullabilityAnalysisTestGenerated extends AbstractNullabilityAnalysi
     @TestMetadata("smartCast.kt")
     public void testSmartCast() throws Exception {
         runTest("nj2k/testData/nullabilityAnalysis/smartCast.kt");
+    }
+
+    @TestMetadata("spreadExpression.kt")
+    public void testSpreadExpression() throws Exception {
+        runTest("nj2k/testData/nullabilityAnalysis/spreadExpression.kt");
     }
 
     @TestMetadata("superMethod.kt")

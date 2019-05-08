@@ -202,12 +202,8 @@ class MoveKotlinDeclarationsProcessor(
         fun collectUsages(kotlinToLightElements: Map<KtNamedDeclaration, List<PsiNamedElement>>, result: MutableCollection<UsageInfo>) {
             kotlinToLightElements.values.flatten().flatMapTo(result) { lightElement ->
                 val searchScope = getSearchScope(lightElement) ?: return@flatMapTo emptyList()
-
-                val newFqName = StringUtil.getQualifiedName(newContainerName, lightElement.name)
-                val newFqNameForKt = StringUtil.getQualifiedName(
-                    newContainerName,
-                    lightElement.namedUnwrappedElement?.name?: lightElement.name
-                )
+                val elementName = lightElement.name ?: return@flatMapTo emptyList()
+                val newFqName = StringUtil.getQualifiedName(newContainerName, elementName)
 
                 val foundReferences = HashSet<PsiReference>()
                 val results = ReferencesSearch
@@ -234,19 +230,6 @@ class MoveKotlinDeclarationsProcessor(
                 MoveClassHandler.EP_NAME.extensions.forEach { handler ->
                     if (handler !is MoveKotlinClassHandler) handler.preprocessUsages(results)
                 }
-
-                results
-                    .filter { it is NonCodeUsageInfo && it.file is KtFile }
-                    .forEach {
-                        val newText = NonCodeUsageInfo::class.java.getField("newText")
-                        // A 'newText' is marked as final initially, but here we need to change it to prevent
-                        // light-class names in kotlin files.
-                        val oldAccessibility = newText.isAccessible
-                        newText.isAccessible = true
-                        newText.set(it, newFqNameForKt)
-                        // Restore initial accessibility of 'newText' field.
-                        newText.isAccessible = oldAccessibility
-                    }
 
                 results
             }

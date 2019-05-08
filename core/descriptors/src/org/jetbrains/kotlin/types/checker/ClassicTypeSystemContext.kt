@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types.checker
@@ -8,16 +8,21 @@ package org.jetbrains.kotlin.types.checker
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns.FQ_NAMES
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.resolve.calls.inference.CapturedType
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasExactAnnotation
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasNoInferAnnotation
 import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
+import org.jetbrains.kotlin.resolve.descriptorUtil.isExactAnnotation
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.model.*
 import org.jetbrains.kotlin.types.model.CaptureStatus
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.types.typeUtil.contains
+import kotlin.math.max
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.contract
 
 interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     override fun TypeConstructorMarker.isDenotable(): Boolean {
@@ -44,6 +49,11 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     override fun KotlinTypeMarker.isError(): Boolean {
         require(this is KotlinType, this::errorMessage)
         return this.isError
+    }
+
+    override fun KotlinTypeMarker.isUninferredParameter(): Boolean {
+        require(this is KotlinType, this::errorMessage)
+        return ErrorUtils.isUninferredParameter(this)
     }
 
     override fun SimpleTypeMarker.isStubType(): Boolean {
@@ -342,6 +352,12 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
         return this.replaceAnnotations(Annotations.EMPTY)
     }
 
+    override fun KotlinTypeMarker.removeExactAnnotation(): KotlinTypeMarker {
+        require(this is UnwrappedType, this::errorMessage)
+        val annotationsWithoutExact = this.annotations.filterNot(AnnotationDescriptor::isExactAnnotation)
+        return this.replaceAnnotations(Annotations.create(annotationsWithoutExact))
+    }
+
     override fun KotlinTypeMarker.hasExactAnnotation(): Boolean {
         require(this is UnwrappedType, this::errorMessage)
         return hasExactInternal(this)
@@ -359,6 +375,11 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     override fun CapturedTypeMarker.typeConstructorProjection(): TypeArgumentMarker {
         require(this is NewCapturedType, this::errorMessage)
         return this.constructor.projection
+    }
+
+    override fun CapturedTypeMarker.captureStatus(): CaptureStatus {
+        require(this is NewCapturedType, this::errorMessage)
+        return this.captureStatus
     }
 
     override fun KotlinTypeMarker.isNullableType(): Boolean {
@@ -395,6 +416,7 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
 
     override fun SimpleTypeMarker.replaceArguments(newArguments: List<TypeArgumentMarker>): SimpleTypeMarker {
         require(this is SimpleType, this::errorMessage)
+        @Suppress("UNCHECKED_CAST")
         return this.replace(newArguments as List<TypeProjection>)
     }
 
@@ -422,7 +444,9 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     }
 
     override fun TypeSubstitutorMarker.safeSubstitute(type: KotlinTypeMarker): KotlinTypeMarker {
-        errorSupportedOnlyInTypeInference()
+        require(type is UnwrappedType, type::errorMessage)
+        require(this is TypeSubstitutor, this::errorMessage)
+        return safeSubstitute(type, Variance.INVARIANT)
     }
 
     override fun TypeVariableMarker.defaultType(): SimpleTypeMarker {
@@ -443,7 +467,28 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
         require(this is IntegerLiteralTypeConstructor, this::errorMessage)
         return this.getApproximatedType().unwrap()
     }
+
+    override fun SimpleTypeMarker.isPrimitiveType(): Boolean {
+        require(this is KotlinType, this::errorMessage)
+        return KotlinBuiltIns.isPrimitiveType(this)
+    }
+
+    override fun captureFromExpression(type: KotlinTypeMarker): KotlinTypeMarker? {
+        return captureFromExpressionInternal(type as UnwrappedType)
+    }
+
+    override fun createErrorTypeWithCustomConstructor(debugName: String, constructor: TypeConstructorMarker): KotlinTypeMarker {
+        require(constructor is TypeConstructor, constructor::errorMessage)
+        return ErrorUtils.createErrorTypeWithCustomConstructor(debugName, constructor)
+    }
+
+    override fun TypeConstructorMarker.isCapturedTypeConstructor(): Boolean {
+        return this is NewCapturedTypeConstructor
+    }
+
 }
+
+private fun captureFromExpressionInternal(type: UnwrappedType) = captureFromExpression(type)
 
 private fun hasNoInferInternal(type: UnwrappedType): Boolean {
     return type.hasNoInferAnnotation()
@@ -470,7 +515,7 @@ private fun singleBestRepresentative(collection: Collection<KotlinType>) = colle
 internal fun UnwrappedType.typeDepthInternal() =
     when (this) {
         is SimpleType -> typeDepthInternal()
-        is FlexibleType -> Math.max(lowerBound.typeDepthInternal(), upperBound.typeDepthInternal())
+        is FlexibleType -> max(lowerBound.typeDepthInternal(), upperBound.typeDepthInternal())
     }
 
 internal fun SimpleType.typeDepthInternal(): Int {
@@ -498,5 +543,20 @@ fun Variance.convertVariance(): TypeVariance {
         Variance.INVARIANT -> TypeVariance.INV
         Variance.IN_VARIANCE -> TypeVariance.IN
         Variance.OUT_VARIANCE -> TypeVariance.OUT
+    }
+}
+
+
+@Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
+@UseExperimental(ExperimentalContracts::class)
+fun requireOrDescribe(condition: Boolean, value: Any?) {
+    contract {
+        returns() implies condition
+    }
+    require(condition) {
+        val typeInfo = if (value != null) {
+            ", type = '${value::class}'"
+        } else ""
+        "Unexpected: value = '$value'$typeInfo"
     }
 }

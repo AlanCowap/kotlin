@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.lower
@@ -129,7 +129,7 @@ private class AnnotationLowering(private val context: JvmBackendContext) : FileL
             ?.takeIf { (it.parent as? IrClass)?.isAnnotationClass ?: false }
             ?: return super.visitCall(expression)
 
-        val field = function.correspondingProperty?.backingField
+        val field = function.correspondingPropertySymbol?.owner?.backingField
             ?: return super.visitCall(expression)
 
         // Wrap the property access with a call to getOrCreateKClass(es) and fix the type
@@ -153,12 +153,8 @@ private class AnnotationLowering(private val context: JvmBackendContext) : FileL
         return context.irBuiltIns.arrayClass.createType(false, listOf(argument))
     }
 
-    private val intrinsics = IrIntrinsicMethods(context.irBuiltIns)
-
-    private fun IrCall.isGetJava(): Boolean {
-        val intrinsic = intrinsics.getIntrinsic(descriptor.original)
-        return intrinsic is KClassJavaProperty
-    }
+    private fun IrCall.isGetJava(): Boolean =
+        context.irIntrinsics.getIntrinsic(symbol) is KClassJavaProperty
 }
 
 private fun IrClassSymbol.getFunctionByName(name: String, numParams: Int): IrSimpleFunctionSymbol =

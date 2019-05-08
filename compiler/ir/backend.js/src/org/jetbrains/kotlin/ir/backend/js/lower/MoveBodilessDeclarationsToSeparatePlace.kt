@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
@@ -55,15 +55,13 @@ private class DescriptorlessExternalPackageFragmentSymbol : IrExternalPackageFra
 }
 
 fun moveBodilessDeclarationsToSeparatePlace(context: JsIrBackendContext, module: IrModuleFragment) {
-    val externalPackageFragment = IrExternalPackageFragmentImpl(
-        DescriptorlessExternalPackageFragmentSymbol(),
-        FqName.ROOT
-    )
 
     val bodilessBuiltInsPackageFragment = IrExternalPackageFragmentImpl(
         DescriptorlessExternalPackageFragmentSymbol(),
         FqName("kotlin")
     )
+
+    context.bodilessBuiltInsPackageFragment = bodilessBuiltInsPackageFragment
 
     fun isBuiltInClass(declaration: IrDeclaration): Boolean =
         declaration is IrClass && declaration.fqNameWhenAvailable in BODILESS_BUILTIN_CLASSES
@@ -82,6 +80,15 @@ fun moveBodilessDeclarationsToSeparatePlace(context: JsIrBackendContext, module:
     }
 
     fun lowerFile(irFile: IrFile): IrFile? {
+        val externalPackageFragment by lazy {
+            context.externalPackageFragment.getOrPut(irFile.fqName) {
+                IrExternalPackageFragmentImpl(
+                    DescriptorlessExternalPackageFragmentSymbol(),
+                    irFile.fqName
+                )
+            }
+        }
+
         context.externalNestedClasses += collectExternalClasses(irFile, includeCurrentLevel = false)
 
         if (irFile.getJsModule() != null || irFile.getJsQualifier() != null) {
@@ -92,7 +99,7 @@ fun moveBodilessDeclarationsToSeparatePlace(context: JsIrBackendContext, module:
         val it = irFile.declarations.iterator()
 
         while (it.hasNext()) {
-            val d = it.next()
+            val d = it.next() as? IrDeclarationWithName ?: continue
 
             if (isBuiltInClass(d)) {
                 it.remove()

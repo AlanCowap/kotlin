@@ -42,6 +42,14 @@ dependencies {
     // Workaround for missing transitive import of the common(project `kotlin-test-common`
     // for `kotlin-test-jvm` into the IDE:
     testCompileOnly(project(":kotlin-test:kotlin-test-common")) { isTransitive = false }
+
+    // Workaround for IDE import. IDEA cannot resolve kotlin-native-shared included in the
+    // Gradle plugin's fat jar so we declare it here explicitly.
+    if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
+        testCompileOnly(commonDep("org.jetbrains.kotlin:kotlin-native-shared")) {
+            isTransitive = false
+        }
+    }
 }
 
 val jpsIncrementalTestsClass = "**/KotlinGradlePluginJpsParametrizedIT.class"
@@ -125,6 +133,8 @@ tasks.withType<Test> {
 
     systemProperty("kotlinVersion", rootProject.extra["kotlinVersion"] as String)
     systemProperty("runnerGradleVersion", gradle.gradleVersion)
+    systemProperty("jdk10Home", rootProject.extra["JDK_10"] as String)
+    systemProperty("jdk11Home", rootProject.extra["JDK_11"] as String)
 
     val mavenLocalRepo = System.getProperty("maven.repo.local")
     if (mavenLocalRepo != null) {

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.tree
@@ -25,7 +25,7 @@ interface JKNonCodeElementsListOwner {
     var rightNonCodeElements: List<JKNonCodeElement>
 }
 
-inline fun JKNonCodeElementsListOwner.takeNonCodeElementsFrom(other: JKNonCodeElementsListOwner) {
+fun JKNonCodeElementsListOwner.takeNonCodeElementsFrom(other: JKNonCodeElementsListOwner) {
     leftNonCodeElements = other.leftNonCodeElements
     rightNonCodeElements = other.rightNonCodeElements
 }
@@ -33,7 +33,7 @@ inline fun JKNonCodeElementsListOwner.takeNonCodeElementsFrom(other: JKNonCodeEl
 fun JKTreeElement.commentsFromInside(): List<JKCommentElement> {
     val comments = mutableListOf<JKCommentElement>()
     fun recurse(element: JKTreeElement): JKTreeElement {
-        comments += (element.leftNonCodeElements + element.rightNonCodeElements).filterIsInstance()
+        comments += (element.leftNonCodeElements + element.rightNonCodeElements).filterIsInstance<JKCommentElement>()
         return applyRecursive(element, ::recurse)
     }
     applyRecursive(this, ::recurse)
@@ -43,7 +43,7 @@ fun JKTreeElement.commentsFromInside(): List<JKCommentElement> {
 inline fun <reified T : JKNonCodeElementsListOwner> T.withNonCodeElementsFrom(other: JKNonCodeElementsListOwner): T =
     also { it.takeNonCodeElementsFrom(other) }
 
-inline fun JKNonCodeElementsListOwner.clearNonCodeElements() {
+fun JKNonCodeElementsListOwner.clearNonCodeElements() {
     leftNonCodeElements = emptyList()
     rightNonCodeElements = emptyList()
 }

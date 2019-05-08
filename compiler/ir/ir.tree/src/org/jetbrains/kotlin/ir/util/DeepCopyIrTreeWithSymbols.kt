@@ -188,7 +188,7 @@ open class DeepCopyIrTreeWithSymbols(
             }
         }
 
-    private fun IrAnnotationContainer.transformAnnotations(declaration: IrAnnotationContainer) {
+    private fun IrMutableAnnotationContainer.transformAnnotations(declaration: IrAnnotationContainer) {
         declaration.annotations.transformTo(annotations)
     }
 
@@ -211,7 +211,7 @@ open class DeepCopyIrTreeWithSymbols(
             this.getter = declaration.getter?.transform()
             this.setter = declaration.setter?.transform()
             this.backingField?.let {
-                it.correspondingProperty = this
+                it.correspondingPropertySymbol = symbol
             }
         }
 
@@ -374,7 +374,7 @@ open class DeepCopyIrTreeWithSymbols(
                 symbolRemapper.getReferencedReturnableBlock(expression.symbol),
                 mapStatementOrigin(expression.origin),
                 expression.statements.map { it.transform() },
-                expression.sourceFileSymbol
+                expression.inlineFunctionSymbol
             )
         else
             IrBlockImpl(
@@ -456,6 +456,23 @@ open class DeepCopyIrTreeWithSymbols(
             copyRemappedTypeArgumentsFrom(expression)
             transformValueArguments(expression)
         }
+
+    override fun visitConstructorCall(expression: IrConstructorCall): IrConstructorCall {
+        val constructorSymbol = symbolRemapper.getReferencedConstructor(expression.symbol)
+        return IrConstructorCallImpl(
+            expression.startOffset, expression.endOffset,
+            expression.type.remapType(),
+            constructorSymbol,
+            constructorSymbol.descriptor,
+            expression.typeArgumentsCount,
+            expression.constructorTypeArgumentsCount,
+            expression.valueArgumentsCount,
+            mapStatementOrigin(expression.origin)
+        ).apply {
+            copyRemappedTypeArgumentsFrom(expression)
+            transformValueArguments(expression)
+        }
+    }
 
     private fun IrMemberAccessExpression.copyRemappedTypeArgumentsFrom(other: IrMemberAccessExpression) {
         assert(typeArgumentsCount == other.typeArgumentsCount) {

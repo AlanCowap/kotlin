@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.imports;
@@ -62,6 +62,16 @@ public class JsOptimizeImportsTestGenerated extends AbstractJsOptimizeImportsTes
         @TestMetadata("ComponentFunction.kt")
         public void testComponentFunction() throws Exception {
             runTest("idea/testData/editor/optimizeImports/common/ComponentFunction.kt");
+        }
+
+        @TestMetadata("ConflictWithAlias.kt")
+        public void testConflictWithAlias() throws Exception {
+            runTest("idea/testData/editor/optimizeImports/common/ConflictWithAlias.kt");
+        }
+
+        @TestMetadata("ConflictWithAlias2.kt")
+        public void testConflictWithAlias2() throws Exception {
+            runTest("idea/testData/editor/optimizeImports/common/ConflictWithAlias2.kt");
         }
 
         @TestMetadata("CurrentPackage.kt")
@@ -162,11 +172,6 @@ public class JsOptimizeImportsTestGenerated extends AbstractJsOptimizeImportsTes
         @TestMetadata("TwoConstructors.kt")
         public void testTwoConstructors() throws Exception {
             runTest("idea/testData/editor/optimizeImports/common/TwoConstructors.kt");
-        }
-
-        @TestMetadata("TypeAliasUsage.kt")
-        public void testTypeAliasUsage() throws Exception {
-            runTest("idea/testData/editor/optimizeImports/common/TypeAliasUsage.kt");
         }
 
         @TestMetadata("idea/testData/editor/optimizeImports/common/kt21515")

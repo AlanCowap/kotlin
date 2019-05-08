@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.compilerRunner
@@ -76,7 +76,7 @@ internal class GradleKotlinCompilerWork @Inject constructor(
     companion object {
         init {
             if (System.getProperty("org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.trace.loading") == "true") {
-                System.out.println("Loaded GradleKotlinCompilerWork")
+                println("Loaded GradleKotlinCompilerWork")
             }
         }
     }
@@ -268,7 +268,6 @@ internal class GradleKotlinCompilerWork @Inject constructor(
             outputFiles = outputFiles,
             multiModuleICSettings = icEnv.multiModuleICSettings,
             modulesInfo = incrementalModuleInfo!!,
-            classpathFqNamesHistory = icEnv.classpathFqNamesHistory,
             kotlinScriptExtensions = kotlinScriptExtensions
         )
 

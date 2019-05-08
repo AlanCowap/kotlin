@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types.model
@@ -24,6 +24,7 @@ interface StubTypeMarker : SimpleTypeMarker
 interface TypeArgumentListMarker
 
 interface TypeVariableMarker
+interface TypeVariableTypeConstructorMarker : TypeConstructorMarker
 
 interface TypeSubstitutorMarker
 
@@ -55,6 +56,8 @@ interface TypeSystemTypeFactoryContext {
     fun createSimpleType(constructor: TypeConstructorMarker, arguments: List<TypeArgumentMarker>, nullable: Boolean): SimpleTypeMarker
     fun createTypeArgument(type: KotlinTypeMarker, variance: TypeVariance): TypeArgumentMarker
     fun createStarProjection(typeParameter: TypeParameterMarker): TypeArgumentMarker
+
+    fun createErrorTypeWithCustomConstructor(debugName: String, constructor: TypeConstructorMarker): KotlinTypeMarker
 }
 
 
@@ -86,6 +89,8 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
 
     fun TypeConstructorMarker.getApproximatedIntegerLiteralType(): KotlinTypeMarker
 
+    fun TypeConstructorMarker.isCapturedTypeConstructor(): Boolean
+
     fun Collection<KotlinTypeMarker>.singleBestRepresentative(): KotlinTypeMarker?
 
     fun KotlinTypeMarker.isUnit(): Boolean
@@ -107,6 +112,7 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
 
 
     fun KotlinTypeMarker.removeAnnotations(): KotlinTypeMarker
+    fun KotlinTypeMarker.removeExactAnnotation(): KotlinTypeMarker
 
     fun SimpleTypeMarker.replaceArguments(newArguments: List<TypeArgumentMarker>): SimpleTypeMarker
 
@@ -117,6 +123,7 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
 
 
     fun CapturedTypeMarker.typeConstructorProjection(): TypeArgumentMarker
+    fun CapturedTypeMarker.captureStatus(): CaptureStatus
 
     fun KotlinTypeMarker.isNullableType(): Boolean
 
@@ -143,6 +150,7 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.asFlexibleType(): FlexibleTypeMarker?
 
     fun KotlinTypeMarker.isError(): Boolean
+    fun KotlinTypeMarker.isUninferredParameter(): Boolean
 
     fun FlexibleTypeMarker.asDynamicType(): DynamicTypeMarker?
 
@@ -196,6 +204,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.lowerBoundIfFlexible(): SimpleTypeMarker = this.asFlexibleType()?.lowerBound() ?: this.asSimpleType()!!
     fun KotlinTypeMarker.upperBoundIfFlexible(): SimpleTypeMarker = this.asFlexibleType()?.upperBound() ?: this.asSimpleType()!!
 
+    fun KotlinTypeMarker.isFlexible(): Boolean = asFlexibleType() != null
+
     fun KotlinTypeMarker.isDynamic(): Boolean = asFlexibleType()?.asDynamicType() != null
     fun KotlinTypeMarker.isDefinitelyNotNullType(): Boolean = asSimpleType()?.asDefinitelyNotNullType() != null
 
@@ -217,6 +227,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
         type: SimpleTypeMarker,
         status: CaptureStatus
     ): SimpleTypeMarker?
+
+    fun captureFromExpression(type: KotlinTypeMarker): KotlinTypeMarker?
 
     fun SimpleTypeMarker.asArgumentList(): TypeArgumentListMarker
 
@@ -258,6 +270,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.isSimpleType() = asSimpleType() != null
 
     fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker
+
+    fun SimpleTypeMarker.isPrimitiveType(): Boolean
 }
 
 enum class CaptureStatus {

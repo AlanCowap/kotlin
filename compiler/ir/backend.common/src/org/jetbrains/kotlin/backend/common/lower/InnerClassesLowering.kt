@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common.lower
@@ -135,21 +135,20 @@ val innerClassConstructorCallsPhase = makeIrFilePhase(
 class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLoweringPass {
     override fun lower(irBody: IrBody) {
         irBody.transformChildrenVoid(object : IrElementTransformerVoid() {
-            override fun visitCall(expression: IrCall): IrExpression {
+            override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
                 expression.transformChildrenVoid(this)
 
                 val dispatchReceiver = expression.dispatchReceiver ?: return expression
-                val callee = expression.symbol as? IrConstructorSymbol ?: return expression
-                val parent = callee.owner.parent as? IrClass ?: return expression
+                val callee = expression.symbol
+                val parent = callee.owner.parentAsClass
                 if (!parent.isInner) return expression
 
                 val newCallee = context.declarationFactory.getInnerClassConstructorWithOuterThisParameter(callee.owner)
-                val newCall = IrCallImpl(
-                    expression.startOffset, expression.endOffset, expression.type, newCallee.symbol, newCallee.descriptor,
-                    0, // TODO type arguments map
-                    expression.origin
+                val newCall = IrConstructorCallImpl.fromSymbolOwner(
+                    expression.startOffset, expression.endOffset, expression.type, newCallee.symbol, expression.origin
                 )
 
+                newCall.copyTypeArgumentsFrom(expression)
                 newCall.putValueArgument(0, dispatchReceiver)
                 for (i in 1..newCallee.valueParameters.lastIndex) {
                     newCall.putValueArgument(i, expression.getValueArgument(i - 1))
@@ -163,12 +162,12 @@ class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLowe
 
                 val dispatchReceiver = expression.dispatchReceiver ?: return expression
                 val classConstructor = expression.symbol.owner
-                if (!(classConstructor.parent as IrClass).isInner) return expression
+                if (!classConstructor.parentAsClass.isInner) return expression
 
                 val newCallee = context.declarationFactory.getInnerClassConstructorWithOuterThisParameter(classConstructor)
                 val newCall = IrDelegatingConstructorCallImpl(
                     expression.startOffset, expression.endOffset, context.irBuiltIns.unitType, newCallee.symbol, newCallee.descriptor,
-                    classConstructor.typeParameters.size
+                    expression.typeArgumentsCount
                 ).apply { copyTypeArgumentsFrom(expression) }
 
                 newCall.putValueArgument(0, dispatchReceiver)

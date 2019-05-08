@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.test.interop
@@ -15,7 +15,7 @@ import java.io.File
 class ScriptEngineV8 : ScriptEngine {
     companion object {
         // It's important that this is not created per test, but rather per process.
-        val LIBRARY_PATH_BASE = KotlinTestUtils.tmpDirForReusableLibrary("j2v8_library_path").path
+        val LIBRARY_PATH_BASE = KotlinTestUtils.tmpDirForReusableFolder("j2v8_library_path").path
     }
 
     override fun <T> releaseObject(t: T) {
@@ -39,7 +39,7 @@ class ScriptEngineV8 : ScriptEngine {
 
     private fun getGlobalPropertyNames(): List<String> {
         val v8Array = eval<V8Array>("Object.getOwnPropertyNames(this)")
-        val javaArray = V8ObjectUtils.toList(v8Array) as List<String>
+        @Suppress("UNCHECKED_CAST") val javaArray = V8ObjectUtils.toList(v8Array) as List<String>
         v8Array.release()
         return javaArray
     }
@@ -74,7 +74,7 @@ class ScriptEngineV8 : ScriptEngine {
     }
 
     override fun loadFile(path: String) {
-        evalVoid(File(path).bufferedReader().use { it.readText() })
+        myRuntime.executeVoidScript(File(path).bufferedReader().use { it.readText() }, path, 0)
     }
 
     override fun release() {

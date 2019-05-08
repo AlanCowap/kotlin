@@ -1,15 +1,14 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.deserialization
 
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.impl.FirClassImpl
-import org.jetbrains.kotlin.fir.declarations.impl.FirTypeParameterImpl
+import org.jetbrains.kotlin.fir.resolve.transformers.firUnsafe
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
 import org.jetbrains.kotlin.fir.types.impl.FirResolvedTypeRefImpl
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.Flags
@@ -20,7 +19,6 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.ProtoEnumFlags
 import org.jetbrains.kotlin.serialization.deserialization.getName
-import org.jetbrains.kotlin.types.Variance
 
 fun deserializeClassToSymbol(
     classId: ClassId,
@@ -28,6 +26,7 @@ fun deserializeClassToSymbol(
     symbol: FirClassSymbol,
     nameResolver: NameResolver,
     session: FirSession,
+    defaultAnnotationDeserializer: AbstractAnnotationDeserializer?,
     parentContext: FirDeserializationContext? = null,
     deserializeNestedClass: (ClassId, FirDeserializationContext) -> FirClassSymbol?
 ) {
@@ -44,15 +43,19 @@ fun deserializeClassToSymbol(
         Flags.IS_DATA.get(classProto.flags),
         Flags.IS_INLINE_CLASS.get(classProto.flags)
     ).apply {
-        for (typeParameter in classProto.typeParameterList) {
-            typeParameters += createTypeParameterSymbol(nameResolver.getName(typeParameter.name), session).fir
-        }
-        //addAnnotationsFrom(classProto) ? TODO
 
         val context =
-            parentContext?.childContext(classProto.typeParameterList, nameResolver, TypeTable(classProto.typeTable))
-                ?: FirDeserializationContext
-                    .createForClass(classId, classProto, nameResolver, session)
+            parentContext?.childContext(
+                classProto.typeParameterList,
+                nameResolver,
+                TypeTable(classProto.typeTable),
+                classId.relativeClassName
+            ) ?: FirDeserializationContext.createForClass(
+                classId, classProto, nameResolver, session,
+                defaultAnnotationDeserializer ?: FirBuiltinAnnotationDeserializer(session)
+            )
+        typeParameters += context.typeDeserializer.ownTypeParameters.map { it.firUnsafe() }
+        annotations += context.annotationDeserializer.loadClassAnnotations(classProto, context.nameResolver)
 
         val typeDeserializer = context.typeDeserializer
         val classDeserializer = context.memberDeserializer
@@ -63,21 +66,33 @@ fun deserializeClassToSymbol(
 
         superTypesDeserialized.mapNotNullTo(superTypeRefs) {
             if (it == null) return@mapNotNullTo null
-            FirResolvedTypeRefImpl(session, null, it, false, emptyList())
+            FirResolvedTypeRefImpl(session, null, it)
         }
 
-        // TODO: properties
-        declarations += classProto.functionList.map(classDeserializer::loadFunction)
+        addDeclarations(classProto.functionList.map(classDeserializer::loadFunction))
+        addDeclarations(classProto.propertyList.map(classDeserializer::loadProperty))
 
-        declarations += classProto.nestedClassNameList.mapNotNull { nestedNameId ->
-            val nestedClassId = classId.createNestedClassId(Name.identifier(nameResolver.getString(nestedNameId)))
-            deserializeNestedClass(nestedClassId, context)?.fir
-        }
+        addDeclarations(
+            classProto.constructorList.map {
+                classDeserializer.loadConstructor(it, this)
+            }
+        )
+
+        addDeclarations(
+            classProto.nestedClassNameList.mapNotNull { nestedNameId ->
+                val nestedClassId = classId.createNestedClassId(Name.identifier(nameResolver.getString(nestedNameId)))
+                deserializeNestedClass(nestedClassId, context)?.fir
+            }
+        )
+
+        addDeclarations(
+            classProto.enumEntryList.mapNotNull { enumEntryProto ->
+                val enumEntryName = nameResolver.getName(enumEntryProto.name)
+                val enumEntryId = classId.createNestedClassId(enumEntryName)
+                val deserializedClassSymbol = deserializeNestedClass(enumEntryId, context)
+                deserializedClassSymbol?.fir
+            }
+        )
     }
 }
 
-private fun createTypeParameterSymbol(name: Name, session: FirSession): FirTypeParameterSymbol {
-    val firSymbol = FirTypeParameterSymbol()
-    FirTypeParameterImpl(session, null, firSymbol, name, variance = Variance.INVARIANT, isReified = false)
-    return firSymbol
-}

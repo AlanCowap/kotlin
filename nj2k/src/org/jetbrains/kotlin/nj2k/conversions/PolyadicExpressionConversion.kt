@@ -1,10 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.conversions
 
+import org.jetbrains.kotlin.nj2k.parenthesizeIfBinaryExpression
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.JKBinaryExpressionImpl
 import org.jetbrains.kotlin.nj2k.tree.impl.JKParenthesizedExpressionImpl
@@ -14,7 +15,8 @@ class PolyadicExpressionConversion : RecursiveApplicableConversionBase() {
     override fun applyToElement(element: JKTreeElement): JKTreeElement {
         if (element !is JKJavaPolyadicExpression) return recurse(element)
         val needParenthesis = element.operands.any { it.containsNewLine() }
-        val polyadic = convertPolyadic(element.operands.also { element.operands = emptyList() }, element.tokens)
+        val parenthesisedOperands = element::operands.detached().map { it.parenthesizeIfBinaryExpression() }
+        val polyadic = convertPolyadic(parenthesisedOperands, element.tokens)
 
         return recurse(
             if (needParenthesis) JKParenthesizedExpressionImpl(polyadic)

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.java.enhancement
@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.impl.FirConstExpressionImpl
 import org.jetbrains.kotlin.fir.expressions.impl.FirQualifiedAccessExpressionImpl
-import org.jetbrains.kotlin.fir.java.createTypeParameterSymbol
+import org.jetbrains.kotlin.fir.java.JavaTypeParameterStack
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaClass
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaField
 import org.jetbrains.kotlin.fir.java.toConeProjection
@@ -21,16 +21,10 @@ import org.jetbrains.kotlin.fir.java.toNotNullConeKotlinType
 import org.jetbrains.kotlin.fir.java.types.FirJavaTypeRef
 import org.jetbrains.kotlin.fir.references.FirResolvedCallableReferenceImpl
 import org.jetbrains.kotlin.fir.references.FirSimpleNamedReference
-import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.constructType
 import org.jetbrains.kotlin.fir.resolve.toSymbol
 import org.jetbrains.kotlin.fir.resolve.toTypeProjection
-import org.jetbrains.kotlin.fir.service
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
-import org.jetbrains.kotlin.fir.symbols.ConeClassifierSymbol
-import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
+import org.jetbrains.kotlin.fir.symbols.*
 import org.jetbrains.kotlin.fir.typeContext
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.impl.FirResolvedTypeRefImpl
@@ -57,8 +51,12 @@ internal class IndexedJavaTypeQualifiers(private val data: Array<JavaTypeQualifi
     val size: Int get() = data.size
 }
 
-internal fun FirJavaTypeRef.enhance(session: FirSession, qualifiers: IndexedJavaTypeQualifiers): FirResolvedTypeRef {
-    return type.enhancePossiblyFlexible(session, annotations, qualifiers, 0)
+internal fun FirJavaTypeRef.enhance(
+    session: FirSession,
+    javaTypeParameterStack: JavaTypeParameterStack,
+    qualifiers: IndexedJavaTypeQualifiers
+): FirResolvedTypeRef {
+    return type.enhancePossiblyFlexible(session, javaTypeParameterStack, annotations, qualifiers, 0)
 }
 
 // The index in the lambda is the position of the type component:
@@ -67,6 +65,7 @@ internal fun FirJavaTypeRef.enhance(session: FirSession, qualifiers: IndexedJava
 // For flexible types, both bounds are indexed in the same way: `(A<B>..C<D>)` gives `0 - (A<B>..C<D>), 1 - B and D`.
 private fun JavaType?.enhancePossiblyFlexible(
     session: FirSession,
+    javaTypeParameterStack: JavaTypeParameterStack,
     annotations: List<FirAnnotationCall>,
     qualifiers: IndexedJavaTypeQualifiers,
     index: Int
@@ -76,21 +75,21 @@ private fun JavaType?.enhancePossiblyFlexible(
     return when (type) {
         is JavaClassifierType -> {
             val lowerResult = type.enhanceInflexibleType(
-                session, annotations, arguments, TypeComponentPosition.FLEXIBLE_LOWER, qualifiers, index
+                session, javaTypeParameterStack, annotations, arguments, TypeComponentPosition.FLEXIBLE_LOWER, qualifiers, index
             )
             val upperResult = type.enhanceInflexibleType(
-                session, annotations, arguments, TypeComponentPosition.FLEXIBLE_UPPER, qualifiers, index
+                session, javaTypeParameterStack, annotations, arguments, TypeComponentPosition.FLEXIBLE_UPPER, qualifiers, index
             )
 
             FirResolvedTypeRefImpl(
                 session, psi = null,
                 type = coneFlexibleOrSimpleType(session, lowerResult, upperResult),
-                isMarkedNullable = false, annotations = annotations
+                annotations = annotations
             )
         }
         else -> {
-            val enhanced = type.toNotNullConeKotlinType(session)
-            FirResolvedTypeRefImpl(session, psi = null, type = enhanced, isMarkedNullable = false, annotations = annotations)
+            val enhanced = type.toNotNullConeKotlinType(session, javaTypeParameterStack)
+            FirResolvedTypeRefImpl(session, psi = null, type = enhanced, annotations = annotations)
         }
     }
 }
@@ -131,13 +130,14 @@ private fun ClassId.mutableToReadOnly(): ClassId? {
 
 private fun JavaClassifierType.enhanceInflexibleType(
     session: FirSession,
+    javaTypeParameterStack: JavaTypeParameterStack,
     annotations: List<FirAnnotationCall>,
     arguments: List<JavaType?>,
     position: TypeComponentPosition,
     qualifiers: IndexedJavaTypeQualifiers,
     index: Int
 ): ConeLookupTagBasedType {
-    val originalSymbol = when (val classifier = classifier) {
+    val originalTag = when (val classifier = classifier) {
         is JavaClass -> {
             val classId = classifier.classId!!
             var mappedId = JavaToKotlinClassMap.mapJavaToKotlin(classId.asSingleFqName())
@@ -147,15 +147,14 @@ private fun JavaClassifierType.enhanceInflexibleType(
                 }
             }
             val kotlinClassId = mappedId ?: classId
-            session.service<FirSymbolProvider>().getClassLikeSymbolByFqName(kotlinClassId)
-                ?: return ConeClassErrorType("Cannot find class-like symbol for $kotlinClassId during enhancement")
+            ConeClassLikeLookupTagImpl(kotlinClassId)
         }
-        is JavaTypeParameter -> createTypeParameterSymbol(session, classifier.name)
-        else -> return toNotNullConeKotlinType(session)
+        is JavaTypeParameter -> javaTypeParameterStack[classifier]
+        else -> return toNotNullConeKotlinType(session, javaTypeParameterStack)
     }
 
     val effectiveQualifiers = qualifiers(index)
-    val enhancedSymbol = originalSymbol.enhanceMutability(effectiveQualifiers, position)
+    val enhancedTag = originalTag.enhanceMutability(effectiveQualifiers, position)
 
     var globalArgIndex = index + 1
     val enhancedArguments = arguments.mapIndexed { localArgIndex, arg ->
@@ -163,10 +162,11 @@ private fun JavaClassifierType.enhanceInflexibleType(
             globalArgIndex++
             arg.toConeProjection(
                 session,
-                ((originalSymbol as? FirBasedSymbol<*>)?.fir as? FirCallableMemberDeclaration)?.typeParameters?.getOrNull(localArgIndex)
+                javaTypeParameterStack,
+                ((originalTag as? FirBasedSymbol<*>)?.fir as? FirCallableMemberDeclaration)?.typeParameters?.getOrNull(localArgIndex)
             )
         } else {
-            val argEnhancedTypeRef = arg.enhancePossiblyFlexible(session, annotations, qualifiers, globalArgIndex)
+            val argEnhancedTypeRef = arg.enhancePossiblyFlexible(session, javaTypeParameterStack, annotations, qualifiers, globalArgIndex)
             globalArgIndex += arg.subtreeSize()
             argEnhancedTypeRef.type.type.toTypeProjection(Variance.INVARIANT)
         }
@@ -174,7 +174,7 @@ private fun JavaClassifierType.enhanceInflexibleType(
 
     val enhancedNullability = getEnhancedNullability(effectiveQualifiers, position)
 
-    val enhancedType = enhancedSymbol.constructType(enhancedArguments.toTypedArray(), enhancedNullability)
+    val enhancedType = enhancedTag.constructType(enhancedArguments.toTypedArray(), enhancedNullability)
 
     // TODO: why all of these is needed
 //    val enhancement = if (effectiveQualifiers.isNotNullTypeParameter) NotNullTypeParameter(enhancedType) else enhancedType
@@ -197,24 +197,24 @@ private fun getEnhancedNullability(
     }
 }
 
-private fun ConeClassifierSymbol.enhanceMutability(
+private fun ConeClassifierLookupTag.enhanceMutability(
     qualifiers: JavaTypeQualifiers,
     position: TypeComponentPosition
-): ConeClassifierSymbol {
+): ConeClassifierLookupTag {
     if (!position.shouldEnhance()) return this
-    if (this !is FirClassSymbol) return this // mutability is not applicable for type parameters
+    if (this !is ConeClassLikeLookupTag) return this // mutability is not applicable for type parameters
 
     when (qualifiers.mutability) {
         MutabilityQualifier.READ_ONLY -> {
             val readOnlyId = classId.mutableToReadOnly()
             if (position == TypeComponentPosition.FLEXIBLE_LOWER && readOnlyId != null) {
-                return FirClassSymbol(readOnlyId)
+                return ConeClassLikeLookupTagImpl(readOnlyId)
             }
         }
         MutabilityQualifier.MUTABLE -> {
             val mutableId = classId.readOnlyToMutable()
             if (position == TypeComponentPosition.FLEXIBLE_UPPER && mutableId != null) {
-                return FirClassSymbol(mutableId)
+                return ConeClassLikeLookupTagImpl(mutableId)
             }
         }
     }

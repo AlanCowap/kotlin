@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.fir.visitors
 
@@ -200,10 +200,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitCall(annotationCall, null)
     }
 
-    open fun visitArrayGetCall(arrayGetCall: FirArrayGetCall) {
-        visitCall(arrayGetCall, null)
-    }
-
     open fun visitArrayOfCall(arrayOfCall: FirArrayOfCall) {
         visitCall(arrayOfCall, null)
     }
@@ -212,16 +208,16 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitCall(arraySetCall, null)
     }
 
-    open fun visitComponentCall(componentCall: FirComponentCall) {
-        visitCall(componentCall, null)
-    }
-
     open fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall) {
         visitCall(delegatedConstructorCall, null)
     }
 
     open fun visitFunctionCall(functionCall: FirFunctionCall) {
         visitCall(functionCall, null)
+    }
+
+    open fun visitComponentCall(componentCall: FirComponentCall) {
+        visitFunctionCall(componentCall, null)
     }
 
     open fun visitGetClassCall(getClassCall: FirGetClassCall) {
@@ -234,6 +230,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     open fun visitTypeOperatorCall(typeOperatorCall: FirTypeOperatorCall) {
         visitOperatorCall(typeOperatorCall, null)
+    }
+
+    open fun visitStringConcatenationCall(stringConcatenationCall: FirStringConcatenationCall) {
+        visitCall(stringConcatenationCall, null)
     }
 
     open fun visitClassReferenceExpression(classReferenceExpression: FirClassReferenceExpression) {
@@ -264,10 +264,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitJump(returnExpression, null)
     }
 
-    open fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression) {
-        visitExpression(namedArgumentExpression, null)
-    }
-
     open fun visitThrowExpression(throwExpression: FirThrowExpression) {
         visitExpression(throwExpression, null)
     }
@@ -278,6 +274,22 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     open fun visitWhenExpression(whenExpression: FirWhenExpression) {
         visitExpression(whenExpression, null)
+    }
+
+    open fun visitWhenSubjectExpression(whenSubjectExpression: FirWhenSubjectExpression) {
+        visitExpression(whenSubjectExpression, null)
+    }
+
+    open fun visitWrappedArgumentExpression(wrappedArgumentExpression: FirWrappedArgumentExpression) {
+        visitExpression(wrappedArgumentExpression, null)
+    }
+
+    open fun visitLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression) {
+        visitWrappedArgumentExpression(lambdaArgumentExpression, null)
+    }
+
+    open fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression) {
+        visitWrappedArgumentExpression(namedArgumentExpression, null)
     }
 
     open fun visitLoop(loop: FirLoop) {
@@ -348,6 +360,18 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitTypeRef(implicitTypeRef, null)
     }
 
+    open fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef) {
+        visitTypeRef(resolvedTypeRef, null)
+    }
+
+    open fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef) {
+        visitResolvedTypeRef(errorTypeRef, null)
+    }
+
+    open fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef) {
+        visitResolvedTypeRef(resolvedFunctionTypeRef, null)
+    }
+
     open fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability) {
         visitTypeRef(typeRefWithNullability, null)
     }
@@ -358,18 +382,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     open fun visitFunctionTypeRef(functionTypeRef: FirFunctionTypeRef) {
         visitTypeRefWithNullability(functionTypeRef, null)
-    }
-
-    open fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef) {
-        visitTypeRefWithNullability(resolvedTypeRef, null)
-    }
-
-    open fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef) {
-        visitResolvedTypeRef(errorTypeRef, null)
-    }
-
-    open fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef) {
-        visitResolvedTypeRef(resolvedFunctionTypeRef, null)
     }
 
     open fun visitUserTypeRef(userTypeRef: FirUserTypeRef) {
@@ -394,10 +406,6 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
 
     final override fun visitAnonymousObject(anonymousObject: FirAnonymousObject, data: Nothing?) {
         visitAnonymousObject(anonymousObject)
-    }
-
-    final override fun visitArrayGetCall(arrayGetCall: FirArrayGetCall, data: Nothing?) {
-        visitArrayGetCall(arrayGetCall)
     }
 
     final override fun visitArrayOfCall(arrayOfCall: FirArrayOfCall, data: Nothing?) {
@@ -564,6 +572,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitLabeledElement(labeledElement)
     }
 
+    final override fun visitLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression, data: Nothing?) {
+        visitLambdaArgumentExpression(lambdaArgumentExpression)
+    }
+
     final override fun visitLoop(loop: FirLoop, data: Nothing?) {
         visitLoop(loop)
     }
@@ -664,6 +676,10 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitStatement(statement)
     }
 
+    final override fun visitStringConcatenationCall(stringConcatenationCall: FirStringConcatenationCall, data: Nothing?) {
+        visitStringConcatenationCall(stringConcatenationCall)
+    }
+
     final override fun visitSuperReference(superReference: FirSuperReference, data: Nothing?) {
         visitSuperReference(superReference)
     }
@@ -740,8 +756,16 @@ abstract class FirVisitorVoid : FirVisitor<Unit, Nothing?>() {
         visitWhenExpression(whenExpression)
     }
 
+    final override fun visitWhenSubjectExpression(whenSubjectExpression: FirWhenSubjectExpression, data: Nothing?) {
+        visitWhenSubjectExpression(whenSubjectExpression)
+    }
+
     final override fun visitWhileLoop(whileLoop: FirWhileLoop, data: Nothing?) {
         visitWhileLoop(whileLoop)
+    }
+
+    final override fun visitWrappedArgumentExpression(wrappedArgumentExpression: FirWrappedArgumentExpression, data: Nothing?) {
+        visitWrappedArgumentExpression(wrappedArgumentExpression)
     }
 
     final override fun visitElement(element: FirElement, data: Nothing?) {

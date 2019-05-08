@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.resolve.impl
@@ -84,6 +84,19 @@ class FirTypeResolverImpl(private val session: FirSession) : FirTypeResolver {
         return symbol.constructType(typeRef.qualifier, typeRef.isMarkedNullable)
     }
 
+
+    private fun createFunctionalType(typeRef: FirFunctionTypeRef): ConeClassType {
+        val parameters =
+            listOfNotNull((typeRef.receiverTypeRef as FirResolvedTypeRef?)?.type) +
+                    typeRef.valueParameters.map { it.returnTypeRef.coneTypeUnsafe<ConeKotlinType>() } +
+                    listOf(typeRef.returnTypeRef.coneTypeUnsafe())
+        return ConeClassTypeImpl(
+            resolveBuiltInQualified(KotlinBuiltIns.getFunctionClassId(typeRef.parametersCount), session).toLookupTag(),
+            parameters.toTypedArray(),
+            typeRef.isMarkedNullable
+        )
+    }
+
     override fun resolveType(
         typeRef: FirTypeRef,
         scope: FirScope,
@@ -98,13 +111,7 @@ class FirTypeResolverImpl(private val session: FirSession) : FirTypeResolver {
                 ConeKotlinErrorType(typeRef.reason)
             }
             is FirFunctionTypeRef -> {
-                ConeFunctionTypeImpl(
-                    (typeRef.receiverTypeRef as FirResolvedTypeRef?)?.type,
-                    typeRef.valueParameters.map { it.returnTypeRef.coneTypeUnsafe() },
-                    typeRef.returnTypeRef.coneTypeUnsafe(),
-                    resolveBuiltInQualified(KotlinBuiltIns.getFunctionClassId(typeRef.parametersCount), session).toLookupTag(),
-                    typeRef.isMarkedNullable
-                )
+                createFunctionalType(typeRef)
             }
             is FirImplicitBuiltinTypeRef -> {
                 resolveToSymbol(typeRef, scope, position)!!.constructType(emptyList(), isNullable = false)

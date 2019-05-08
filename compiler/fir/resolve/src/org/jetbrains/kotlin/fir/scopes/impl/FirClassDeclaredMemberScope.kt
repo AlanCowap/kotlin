@@ -1,41 +1,68 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.scopes.impl
 
-import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
+import org.jetbrains.kotlin.fir.scopes.FirPosition
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction.NEXT
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction.STOP
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeFunctionSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeVariableSymbol
+import org.jetbrains.kotlin.fir.symbols.*
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 
-class FirClassDeclaredMemberScope(private val klass: FirRegularClass) : FirScope {
-    override fun processFunctionsByName(name: Name, processor: (ConeFunctionSymbol) -> ProcessorAction) =
-        processCallables(name, processor)
+class FirClassDeclaredMemberScope(
+    klass: FirRegularClass
+) : FirScope {
+    private val classId = klass.symbol.classId
+    private val callablesIndex by lazy {
+        klass.declarations.filterIsInstance<FirCallableDeclaration>()
+            .map { it.symbol }.groupBy { it.callableId }
+    }
+    private val classIndex by lazy {
+        klass.declarations.filterIsInstance<FirRegularClass>()
+            .map { it.symbol }.associateBy { it.classId }
+    }
 
-    override fun processPropertiesByName(name: Name, processor: (ConeVariableSymbol) -> ProcessorAction) =
-        processCallables(name, processor)
 
-    private inline fun <reified T : ConeCallableSymbol> processCallables(
-        name: Name,
-        processor: (T) -> ProcessorAction
-    ): ProcessorAction {
-        for (declaration in klass.declarations) {
-            if (declaration !is FirCallableMemberDeclaration) continue
+    override fun processFunctionsByName(name: Name, processor: (ConeFunctionSymbol) -> ProcessorAction): ProcessorAction {
+        val matchedClass = classIndex[ClassId(classId.packageFqName, classId.relativeClassName.child(name), false)]
 
-            val symbol = declaration.symbol as? T ?: continue
-            if (symbol.callableId.callableName != name) continue
+        if (matchedClass != null) {
+            if (FirClassDeclaredMemberScope(matchedClass.fir).processFunctionsByName(name, processor) == STOP) {
+                return STOP
+            }
+        }
+        val symbols = callablesIndex[CallableId(classId.packageFqName, classId.relativeClassName, name)] ?: emptyList()
+        for (symbol in symbols) {
+            if (symbol is ConeFunctionSymbol && !processor(symbol)) {
+                return STOP
+            }
+        }
+        return NEXT
+    }
 
-            if (processor(symbol) == STOP) return STOP
+    override fun processPropertiesByName(name: Name, processor: (ConeVariableSymbol) -> ProcessorAction): ProcessorAction {
+        val symbols = callablesIndex[CallableId(classId.packageFqName, classId.relativeClassName, name)] ?: emptyList()
+        for (symbol in symbols) {
+            if (symbol is ConePropertySymbol && !processor(symbol)) {
+                return STOP
+            }
+        }
+        return NEXT
+    }
+
+    override fun processClassifiersByName(name: Name, position: FirPosition, processor: (ConeClassifierSymbol) -> Boolean): Boolean {
+        val matchedClass = classIndex[classId.createNestedClassId(name)]
+        if (matchedClass != null && !processor(matchedClass)) {
+            return false
         }
 
-        return NEXT
+        return super.processClassifiersByName(name, position, processor)
     }
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.tower
@@ -91,6 +91,7 @@ class KotlinResolutionCallbacksImpl(
         receiverType: UnwrappedType?,
         parameters: List<UnwrappedType>,
         expectedReturnType: UnwrappedType?,
+        annotations: Annotations,
         stubsForPostponedVariables: Map<NewTypeVariable, StubType>
     ): Pair<List<KotlinCallArgument>, InferenceSession?> {
         val psiCallArgument = lambdaArgument.psiCallArgument as PSIFunctionKotlinCallArgument
@@ -130,7 +131,7 @@ class KotlinResolutionCallbacksImpl(
 
         val builtIns = outerCallContext.scope.ownerDescriptor.builtIns
         val expectedType = createFunctionType(
-            builtIns, Annotations.EMPTY, receiverType, parameters, null,
+            builtIns, annotations, receiverType, parameters, null,
             lambdaInfo.expectedType, isSuspend
         )
 
@@ -155,7 +156,7 @@ class KotlinResolutionCallbacksImpl(
             .replaceBindingTrace(trace)
             .replaceContextDependency(lambdaInfo.contextDependency)
             .replaceExpectedType(approximatesExpectedType)
-            .replaceDataFlowInfo(psiCallArgument.lambdaInitialDataFlowInfo).let {
+            .replaceDataFlowInfo(psiCallArgument.dataFlowInfoBeforeThisArgument).let {
                 if (coroutineSession != null) it.replaceInferenceSession(coroutineSession) else it
             }
 
@@ -205,7 +206,9 @@ class KotlinResolutionCallbacksImpl(
     }
 
     override fun bindStubResolvedCallForCandidate(candidate: ResolvedCallAtom) {
-        kotlinToResolvedCallTransformer.createStubResolvedCallAndWriteItToTrace(candidate, trace, emptyList(), substitutor = null)
+        kotlinToResolvedCallTransformer.createStubResolvedCallAndWriteItToTrace<CallableDescriptor>(
+            candidate, trace, emptyList(), substitutor = null
+        )
     }
 
     override fun createReceiverWithSmartCastInfo(resolvedAtom: ResolvedCallAtom): ReceiverValueWithSmartCastInfo? {

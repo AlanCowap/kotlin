@@ -1,2 +1,2 @@
-<R, P> public open class ClassWithTypePRefNext : R|java/lang/Object| {
+public open class ClassWithTypePRefNext<R : R|kotlin/collections/Iterable<P>|, P> : R|kotlin/Any| {
 }

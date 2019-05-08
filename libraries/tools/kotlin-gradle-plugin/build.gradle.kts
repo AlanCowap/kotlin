@@ -37,17 +37,16 @@ dependencies {
     compileOnly(project(":compiler:daemon-common"))
 
     compile(kotlinStdlib())
-    compile(project(":kotlin-native:kotlin-native-utils"))
     compileOnly(project(":kotlin-reflect-api"))
     compileOnly(project(":kotlin-android-extensions"))
     compileOnly(project(":kotlin-build-common"))
     compileOnly(project(":kotlin-compiler-runner"))
     compileOnly(project(":kotlin-annotation-processing"))
     compileOnly(project(":kotlin-annotation-processing-gradle"))
-    compileOnly(project(":kotlin-scripting-compiler"))
+    compileOnly(project(":kotlin-scripting-compiler-impl"))
 
-    compile("com.google.code.gson:gson:2.8.5")
-
+    compile("com.google.code.gson:gson:${rootProject.extra["versions.jar.gson"]}")
+    
     compileOnly("com.android.tools.build:gradle:2.0.0")
     compileOnly("com.android.tools.build:gradle-core:2.0.0")
     compileOnly("com.android.tools.build:builder:2.0.0")
@@ -62,9 +61,16 @@ dependencies {
     runtime(projectRuntimeJar(":kotlin-android-extensions"))
     runtime(projectRuntimeJar(":kotlin-compiler-runner"))
     runtime(projectRuntimeJar(":kotlin-scripting-compiler-embeddable"))
+    runtime(projectRuntimeJar(":kotlin-scripting-compiler-impl-embeddable"))
     runtime(project(":kotlin-reflect"))
 
-    jarContents(compileOnly(intellijDep()) { includeJars("serviceMessages", "gson-2.8.5") })
+    jarContents(compileOnly(intellijDep()) {
+        includeJars("asm-all", "serviceMessages", "gson", rootProject = rootProject)
+    })
+    
+    jarContents(compileOnly(commonDep("org.jetbrains.kotlin:kotlin-native-shared")) {
+        isTransitive = false
+    })
 
     // com.android.tools.build:gradle has ~50 unneeded transitive dependencies
     compileOnly("com.android.tools.build:gradle:3.0.0") { isTransitive = false }
@@ -108,7 +114,8 @@ tasks {
     named<ProcessResources>("processResources") {
         val propertiesToExpand = mapOf(
             "projectVersion" to project.version,
-            "kotlinNativeVersion" to project.kotlinNativeVersion
+            "kotlinNativeVersion" to project.kotlinNativeVersion,
+            "kotlinNativeSharedVersion" to project.kotlinNativeSharedVersion
         )
         for ((name, value) in propertiesToExpand) {
             inputs.property(name, value)
@@ -180,5 +187,10 @@ pluginBundle {
         name = "kotlinScriptingPlugin",
         id = "org.jetbrains.kotlin.plugin.scripting",
         display = "Gradle plugin for kotlin scripting"
+    )
+    create(
+        name = "kotlinNativeCocoapodsPlugin",
+        id = "org.jetbrains.kotlin.native.cocoapods",
+        display = "Kotlin Native plugin for CocoaPods integration"
     )
 }

@@ -25,8 +25,9 @@ import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.NewCapturedType
 import org.jetbrains.kotlin.types.model.*
 import java.util.*
+import kotlin.math.max
 
-class ConstraintInjector(val constraintIncorporator: ConstraintIncorporator, val typeApproximator: TypeApproximator) {
+class ConstraintInjector(val constraintIncorporator: ConstraintIncorporator, val typeApproximator: AbstractTypeApproximator) {
     private val ALLOWED_DEPTH_DELTA_FOR_INCORPORATION = 1
 
     interface Context : TypeSystemInferenceExtensionContext {
@@ -85,7 +86,7 @@ class ConstraintInjector(val constraintIncorporator: ConstraintIncorporator, val
     }
 
     private fun updateAllowedTypeDepth(c: Context, initialType: KotlinTypeMarker) = with(c) {
-        c.maxTypeDepthFromInitialConstraints = Math.max(c.maxTypeDepthFromInitialConstraints, initialType.typeDepth())
+        c.maxTypeDepthFromInitialConstraints = max(c.maxTypeDepthFromInitialConstraints, initialType.typeDepth())
     }
 
     private fun Context.shouldWeSkipConstraint(typeVariable: TypeVariableMarker, constraint: Constraint): Boolean {
@@ -153,7 +154,7 @@ class ConstraintInjector(val constraintIncorporator: ConstraintIncorporator, val
             addConstraint(typeVariable, subType, LOWER)
 
         private fun isCapturedTypeFromSubtyping(type: KotlinTypeMarker) =
-            when ((type as? NewCapturedType)?.captureStatus) {
+            when ((type as? CapturedTypeMarker)?.captureStatus()) {
                 null, CaptureStatus.FROM_EXPRESSION -> false
                 CaptureStatus.FOR_SUBTYPING -> true
                 CaptureStatus.FOR_INCORPORATION ->
@@ -165,6 +166,11 @@ class ConstraintInjector(val constraintIncorporator: ConstraintIncorporator, val
                     ?: error("Should by type variableConstructor: $typeVariableConstructor. ${c.allTypeVariables.values}")
 
             var targetType = type
+            if (targetType.isUninferredParameter()) {
+                // there already should be an error, so there is no point in reporting one more
+                return
+            }
+
             if (targetType.isError()) {
                 c.addError(ConstrainingTypeIsError(typeVariable, targetType, position))
                 return

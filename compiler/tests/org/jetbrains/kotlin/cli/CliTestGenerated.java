@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.cli;
@@ -294,6 +294,16 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("internalArgNoWarningForEnablingBugfix.args")
         public void testInternalArgNoWarningForEnablingBugfix() throws Exception {
             runTest("compiler/testData/cli/jvm/internalArgNoWarningForEnablingBugfix.args");
+        }
+
+        @TestMetadata("internalArgOverrideLanguageFeature.args")
+        public void testInternalArgOverrideLanguageFeature() throws Exception {
+            runTest("compiler/testData/cli/jvm/internalArgOverrideLanguageFeature.args");
+        }
+
+        @TestMetadata("internalArgOverrideOffLanguageFeature.args")
+        public void testInternalArgOverrideOffLanguageFeature() throws Exception {
+            runTest("compiler/testData/cli/jvm/internalArgOverrideOffLanguageFeature.args");
         }
 
         @TestMetadata("internalArgUnrecognizedFeature.args")

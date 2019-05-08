@@ -39,9 +39,12 @@ import java.rmi.server.UnicastRemoteObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
-import kotlin.script.dependencies.*
-import kotlin.script.experimental.dependencies.*
+import kotlin.script.dependencies.Environment
+import kotlin.script.dependencies.ScriptContents
+import kotlin.script.experimental.dependencies.DependenciesResolver
 import kotlin.script.experimental.dependencies.DependenciesResolver.ResolveResult
+import kotlin.script.experimental.dependencies.ScriptDependencies
+import kotlin.script.experimental.dependencies.asSuccess
 import kotlin.script.templates.ScriptTemplateDefinition
 import kotlin.test.fail
 
@@ -576,11 +579,11 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
                             ParallelStartParams.performCompilation -> {
                                 val jar = tmpdir.absolutePath + File.separator + "hello.$threadNo.jar"
                                 KotlinCompilerClient.compile(
-                                        compileServiceSession!!.compileService,
-                                        compileServiceSession.sessionId,
-                                        CompileService.TargetPlatform.JVM,
-                                        arrayOf(File(getHelloAppBaseDir(), "hello.kt").absolutePath, "-d", jar),
-                                        PrintingMessageCollector(PrintStream(outStreams[threadNo]), MessageRenderer.WITHOUT_PATHS, true))
+                                    compileServiceSession.compileService,
+                                    compileServiceSession.sessionId,
+                                    CompileService.TargetPlatform.JVM,
+                                    arrayOf(File(getHelloAppBaseDir(), "hello.kt").absolutePath, "-d", jar),
+                                    PrintingMessageCollector(PrintStream(outStreams[threadNo]), MessageRenderer.WITHOUT_PATHS, true))
                             }
                             else -> 0 // compilation skipped, assuming - successful
                         }
@@ -727,16 +730,17 @@ class CompilerDaemonTest : KotlinIntegrationTestBase() {
                     daemon, null, CompileService.TargetPlatform.JVM, emptyArray(), TestMessageCollector(),
                     classpathFromClassloader(), ScriptWithNoParam::class.qualifiedName!!
                 )
+                repl.createState()
             } catch (e: Exception) {
                 TestCase.assertEquals(
-                    "Unable to use scripting/REPL in the daemon, no kotlin-scripting-compiler.jar or its dependencies are found in the compiler classpath",
+                    "Unable to use scripting/REPL in the daemon: no scripting plugin loaded",
                     e.message
                 )
                 isErrorThrown = true
             } finally {
                 repl?.dispose()
             }
-            TestCase.assertTrue("Expecting exception that kotlin-scripting-plugin is not found in the classpath", isErrorThrown)
+            TestCase.assertTrue("Expecting exception that scripting plugin is not loaded", isErrorThrown)
         }
     }
 

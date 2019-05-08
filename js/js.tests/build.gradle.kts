@@ -2,10 +2,6 @@ import com.moowork.gradle.node.NodeExtension
 import com.moowork.gradle.node.npm.NpmTask
 import org.gradle.internal.os.OperatingSystem
 
-tasks.withType<Test> {
-    maxParallelForks = Math.max(Runtime.getRuntime().availableProcessors() / 2, 1)
-}
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
@@ -19,8 +15,6 @@ node {
 val antLauncherJar by configurations.creating
 val testJsRuntime by configurations.creating
 
-val generateIrRuntimeKlib by generator("org.jetbrains.kotlin.generators.tests.GenerateIrRuntimeKt")
-
 dependencies {
     testRuntime(intellijDep())
 
@@ -32,6 +26,7 @@ dependencies {
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "util") }
     testCompile(project(":compiler:backend.js"))
+    testCompile(projectTests(":compiler:ir.serialization.js"))
     testCompile(project(":js:js.translator"))
     testCompile(project(":js:js.serializer"))
     testCompile(project(":js:js.dce"))
@@ -69,10 +64,14 @@ sourceSets {
 }
 
 
-fun Test.setUpBoxTests(jsEnabled: Boolean, jsIrEnabled: Boolean, skipIrKlib: Boolean = false) {
+fun Test.setUpBoxTests(jsEnabled: Boolean, jsIrEnabled: Boolean) {
     dependsOn(":dist")
     if (jsEnabled) dependsOn(testJsRuntime)
-    if (jsIrEnabled && !skipIrKlib) dependsOn(generateIrRuntimeKlib)
+    if (jsIrEnabled) {
+        dependsOn(":compiler:ir.serialization.js:generateFullRuntimeKLib")
+        dependsOn(":compiler:ir.serialization.js:generateReducedRuntimeKLib")
+        dependsOn(":compiler:ir.serialization.js:generateKotlinTestKLib")
+    }
 
     if (jsEnabled && !jsIrEnabled) exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
     if (!jsEnabled && jsIrEnabled) include("org/jetbrains/kotlin/js/test/ir/semantics/*")
@@ -95,25 +94,21 @@ fun Test.setUpBoxTests(jsEnabled: Boolean, jsIrEnabled: Boolean, skipIrKlib: Boo
     }
 }
 
-projectTest {
+projectTest(parallel = true) {
     setUpBoxTests(jsEnabled = true, jsIrEnabled = true)
 }
 
-projectTest("jsTest") {
+projectTest("jsTest", true) {
     setUpBoxTests(jsEnabled = true, jsIrEnabled = false)
 }
 
-projectTest("jsIrTest") {
+projectTest("jsIrTest", true) {
     setUpBoxTests(jsEnabled = false, jsIrEnabled = true)
 }
 
-projectTest("quickTest") {
+projectTest("quickTest", true) {
     setUpBoxTests(jsEnabled = true, jsIrEnabled = false)
     systemProperty("kotlin.js.skipMinificationTest", "true")
-}
-
-projectTest("quickIrTest") {
-    setUpBoxTests(jsEnabled = false, jsIrEnabled = true, skipIrKlib = true)
 }
 
 testsJar {}

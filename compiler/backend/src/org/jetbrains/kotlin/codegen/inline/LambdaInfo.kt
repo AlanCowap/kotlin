@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.inline
@@ -37,7 +37,7 @@ import kotlin.properties.Delegates
 
 interface FunctionalArgument
 
-abstract class LambdaInfo(@JvmField val isCrossInline: Boolean) : FunctionalArgument, LabelOwner {
+abstract class LambdaInfo(@JvmField val isCrossInline: Boolean) : FunctionalArgument, ReturnLabelOwner {
 
     abstract val isBoundCallableReference: Boolean
 
@@ -79,7 +79,8 @@ abstract class LambdaInfo(@JvmField val isCrossInline: Boolean) : FunctionalArgu
     }
 }
 
-object CrossinlineLambdaInSuspendContextAsNoInline : FunctionalArgument
+class NonInlineableArgumentForInlineableParameterCalledInSuspend(val isSuspend: Boolean) : FunctionalArgument
+object NonInlineableArgumentForInlineableSuspendParameter : FunctionalArgument
 
 class DefaultLambda(
     override val lambdaClassType: Type,
@@ -102,7 +103,7 @@ class DefaultLambda(
     override lateinit var capturedVars: List<CapturedParamDesc>
         private set
 
-    override fun isMyLabel(name: String): Boolean = false
+    override fun isReturnFromMe(labelName: String): Boolean = false
 
     var originalBoundReceiverType: Type? = null
         private set
@@ -229,7 +230,8 @@ class PsiExpressionLambda(
 
     private val labels: Set<String>
 
-    private var closure: CalculatedClosure
+    var closure: CalculatedClosure
+        private set
 
     init {
         val bindingContext = typeMapper.bindingContext
@@ -300,8 +302,8 @@ class PsiExpressionLambda(
         }
     }
 
-    override fun isMyLabel(name: String): Boolean {
-        return labels.contains(name)
+    override fun isReturnFromMe(labelName: String): Boolean {
+        return labels.contains(labelName)
     }
 
     val isPropertyReference: Boolean

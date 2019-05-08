@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen
@@ -8,12 +8,11 @@ package org.jetbrains.kotlin.codegen
 import com.intellij.psi.PsiElement
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.builtins.UnsignedTypes
+import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.context.CodegenContext
 import org.jetbrains.kotlin.codegen.context.FieldOwnerContext
 import org.jetbrains.kotlin.codegen.context.MultifileClassFacadeContext
-import org.jetbrains.kotlin.codegen.context.PackageContext
 import org.jetbrains.kotlin.codegen.coroutines.continuationAsmType
 import org.jetbrains.kotlin.codegen.coroutines.unwrapInitialDescriptorForSuspendFunction
 import org.jetbrains.kotlin.codegen.inline.NUMBERED_FUNCTION_PREFIX
@@ -169,13 +168,13 @@ fun populateCompanionBackingFieldNamesToOuterContextIfNeeded(
 // so that we'd generate the necessary accessor for its constructor afterwards
 fun sortTopLevelClassesAndPrepareContextForSealedClasses(
     classOrObjects: List<KtClassOrObject>,
-    packagePartContext: PackageContext,
+    context: CodegenContext<*>,
     state: GenerationState
 ): List<KtClassOrObject> {
     fun prepareContextIfNeeded(descriptor: ClassDescriptor?) {
         if (DescriptorUtils.isSealedClass(descriptor)) {
             // save context for sealed class
-            packagePartContext.intoClass(descriptor!!, OwnerKind.IMPLEMENTATION, state)
+            context.intoClass(descriptor!!, OwnerKind.IMPLEMENTATION, state)
         }
     }
 

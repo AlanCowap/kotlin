@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.builders.declarations
@@ -52,6 +52,12 @@ inline fun buildField(b: IrFieldBuilder.() -> Unit) =
         buildField()
     }
 
+inline fun IrDeclarationContainer.addField(b: IrFieldBuilder.() -> Unit) =
+    buildField(b).also { field ->
+        field.parent = this
+        declarations.add(field)
+    }
+
 fun IrPropertyBuilder.buildProperty(): IrProperty {
     val wrappedDescriptor = WrappedPropertyDescriptor()
     return IrPropertyImpl(
@@ -73,6 +79,26 @@ inline fun IrDeclarationContainer.addProperty(b: IrPropertyBuilder.() -> Unit): 
     buildProperty(b).also { property ->
         declarations.add(property)
         property.parent = this@addProperty
+    }
+
+inline fun IrProperty.addGetter(b: IrFunctionBuilder.() -> Unit = {}): IrSimpleFunction =
+    IrFunctionBuilder().run {
+        name = Name.special("<get-${this@addGetter.name}>")
+        b()
+        buildFun().also { getter ->
+            this@addGetter.getter = getter
+            getter.parent = this@addGetter.parent
+        }
+    }
+
+inline fun IrProperty.addSetter(b: IrFunctionBuilder.() -> Unit = {}): IrSimpleFunction =
+    IrFunctionBuilder().run {
+        name = Name.special("<set-${this@addSetter.name}>")
+        b()
+        buildFun().also { setter ->
+            this@addSetter.setter = setter
+            setter.parent = this@addSetter.parent
+        }
     }
 
 fun IrFunctionBuilder.buildFun(): IrSimpleFunction {
@@ -175,6 +201,34 @@ inline fun IrFunction.addValueParameter(b: IrValueParameterBuilder.() -> Unit): 
 fun IrFunction.addValueParameter(name: String, type: IrType, origin: IrDeclarationOrigin = IrDeclarationOrigin.DEFINED): IrValueParameter =
     addValueParameter {
         this.name = Name.identifier(name)
+        this.type = type
+        this.origin = origin
+    }
+
+inline fun IrSimpleFunction.addDispatchReceiver(b: IrValueParameterBuilder.() -> Unit): IrValueParameter =
+    IrValueParameterBuilder().run {
+        b()
+        index = -1
+        name = "this".synthesizedName
+        build().also { receiver ->
+            dispatchReceiverParameter = receiver
+            receiver.parent = this@addDispatchReceiver
+        }
+    }
+
+inline fun IrSimpleFunction.addExtensionReceiver(b: IrValueParameterBuilder.() -> Unit): IrValueParameter =
+    IrValueParameterBuilder().run {
+        b()
+        index = -1
+        name = "receiver".synthesizedName
+        build().also { receiver ->
+            extensionReceiverParameter = receiver
+            receiver.parent = this@addExtensionReceiver
+        }
+    }
+
+fun IrSimpleFunction.addExtensionReceiver(type: IrType, origin: IrDeclarationOrigin = IrDeclarationOrigin.DEFINED ): IrValueParameter =
+    addExtensionReceiver {
         this.type = type
         this.origin = origin
     }

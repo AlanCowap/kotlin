@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.generators.builtins.unsigned
@@ -371,7 +371,6 @@ class UnsignedTypeGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIns
             UnsignedType.UBYTE, UnsignedType.USHORT -> out.println("toInt().toString()")
             UnsignedType.UINT -> out.println("toLong().toString()")
             UnsignedType.ULONG -> out.println("ulongToString(data)")
-            else -> error(type)
         }
 
         out.println()

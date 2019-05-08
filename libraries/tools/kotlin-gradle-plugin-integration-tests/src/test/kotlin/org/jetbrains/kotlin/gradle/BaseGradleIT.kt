@@ -306,7 +306,7 @@ abstract class BaseGradleIT {
         } catch (t: Throwable) {
             // to prevent duplication of output
             if (!options.forceOutputToStdout) {
-                System.out.println(result.output)
+                println(result.output)
             }
             throw t
         }
@@ -608,7 +608,7 @@ abstract class BaseGradleIT {
         val testReportDir = projectDir.resolve("build/test-results/$testReportName")
 
         if (!testReportDir.isDirectory) {
-            error("Test report dir was not created")
+            error("Test report dir $testReportDir was not created")
         }
 
         val actualTestResults = readAndCleanupTestResults(testReportDir, projectDir)

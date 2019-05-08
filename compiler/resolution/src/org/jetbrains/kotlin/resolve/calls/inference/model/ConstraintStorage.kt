@@ -1,17 +1,13 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.inference.model
 
 import org.jetbrains.kotlin.resolve.calls.model.KotlinCallDiagnostic
-import org.jetbrains.kotlin.types.TypeSubstitutor
-import org.jetbrains.kotlin.types.UnwrappedType
-import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
-import org.jetbrains.kotlin.types.model.KotlinTypeMarker
-import org.jetbrains.kotlin.types.model.TypeConstructorMarker
-import org.jetbrains.kotlin.types.model.TypeVariableMarker
+import org.jetbrains.kotlin.types.AbstractTypeChecker
+import org.jetbrains.kotlin.types.model.*
 
 /**
  * Every type variable can be in the following states:
@@ -120,15 +116,18 @@ class InitialConstraint(
 //    return checkConstraint(newB as KotlinTypeMarker, constraintKind, newA as KotlinTypeMarker)
 //}
 
-fun checkConstraint(constraintType: KotlinTypeMarker, constraintKind: ConstraintKind, resultType: KotlinTypeMarker): Boolean {
-    require(constraintType is UnwrappedType)
-    require(resultType is UnwrappedType)
+fun checkConstraint(
+    context: TypeCheckerProviderContext,
+    constraintType: KotlinTypeMarker,
+    constraintKind: ConstraintKind,
+    resultType: KotlinTypeMarker
+): Boolean {
 
 
-    val typeChecker = KotlinTypeChecker.DEFAULT
+    val typeChecker = AbstractTypeChecker
     return when (constraintKind) {
-        ConstraintKind.EQUALITY -> typeChecker.equalTypes(constraintType, resultType)
-        ConstraintKind.LOWER -> typeChecker.isSubtypeOf(constraintType, resultType)
-        ConstraintKind.UPPER -> typeChecker.isSubtypeOf(resultType, constraintType)
+        ConstraintKind.EQUALITY -> typeChecker.equalTypes(context, constraintType, resultType)
+        ConstraintKind.LOWER -> typeChecker.isSubtypeOf(context, constraintType, resultType)
+        ConstraintKind.UPPER -> typeChecker.isSubtypeOf(context, resultType, constraintType)
     }
 }

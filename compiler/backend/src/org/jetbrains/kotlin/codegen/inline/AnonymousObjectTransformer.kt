@@ -1,12 +1,14 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.inline
 
 import com.intellij.util.ArrayUtil
 import org.jetbrains.kotlin.codegen.*
+import org.jetbrains.kotlin.codegen.coroutines.DEBUG_METADATA_ANNOTATION_ASM_TYPE
+import org.jetbrains.kotlin.codegen.coroutines.isCapturedSuspendLambda
 import org.jetbrains.kotlin.codegen.coroutines.isCoroutineSuperClass
 import org.jetbrains.kotlin.codegen.inline.coroutines.CoroutineTransformer
 import org.jetbrains.kotlin.codegen.serialization.JvmCodegenStringTable
@@ -67,6 +69,8 @@ class AnonymousObjectTransformer(
                     // Empty inner class info because no inner classes are used in kotlin.Metadata and its arguments
                     val innerClassesInfo = FileBasedKotlinClass.InnerClassesInfo()
                     return FileBasedKotlinClass.convertAnnotationVisitor(metadataReader, desc, innerClassesInfo)
+                } else if (desc == DEBUG_METADATA_ANNOTATION_ASM_TYPE.descriptor) {
+                    return null
                 }
                 return super.visitAnnotation(desc, visible)
             }
@@ -134,12 +138,14 @@ class AnonymousObjectTransformer(
             inliningContext,
             classBuilder,
             methodsToTransform,
-            superClassName
+            superClassName,
+            allCapturedParamBuilder.listCaptured()
         )
-        for (next in methodsToTransform) {
+        loop@for (next in methodsToTransform) {
             val deferringVisitor =
                 when {
-                    coroutineTransformer.shouldTransform(next) -> coroutineTransformer.newMethod(next)
+                    coroutineTransformer.shouldSkip(next) -> continue@loop
+                    coroutineTransformer.shouldGenerateStateMachine(next) -> coroutineTransformer.newMethod(next)
                     else -> newMethod(classBuilder, next)
                 }
             val funResult = inlineMethodAndUpdateGlobalResult(parentRemapper, deferringVisitor, next, allCapturedParamBuilder, false)
@@ -280,7 +286,7 @@ class AnonymousObjectTransformer(
             ), null
         )
 
-        val result = inliner.doInline(deferringVisitor, LocalVarRemapper(parameters, 0), false, LabelOwner.NOT_APPLICABLE)
+        val result = inliner.doInline(deferringVisitor, LocalVarRemapper(parameters, 0), false, ReturnLabelOwner.NOT_APPLICABLE)
         result.reifiedTypeParametersUsages.mergeAll(typeParametersToReify)
         deferringVisitor.visitMaxs(-1, -1)
         return result
@@ -309,9 +315,9 @@ class AnonymousObjectTransformer(
                 }
 
                 if (size != 0) { //skip this
-                    descTypes.add(info.getType())
+                    descTypes.add(info.type)
                 }
-                size += info.getType().size
+                size += info.type.size
             }
         }
 
@@ -345,7 +351,7 @@ class AnonymousObjectTransformer(
             if (fake.functionalArgument is LambdaInfo) {
                 //set remap value to skip this fake (captured with lambda already skipped)
                 val composed = StackValue.field(
-                    fake.getType(),
+                    fake.type,
                     oldObjectType,
                     fake.newFieldName,
                     false,
@@ -478,6 +484,11 @@ class AnonymousObjectTransformer(
                         alreadyAddedParam?.newFieldName ?: getNewFieldName(desc.fieldName, false),
                         alreadyAddedParam != null
                     )
+                    if (info is PsiExpressionLambda && info.closure.captureVariables.any { it.value.fieldName == desc.fieldName }) {
+                        recapturedParamInfo.functionalArgument = NonInlineableArgumentForInlineableParameterCalledInSuspend(
+                            isCapturedSuspendLambda(info.closure, desc.fieldName, inliningContext.state.bindingContext)
+                        )
+                    }
                     val composed = StackValue.field(
                         desc.type,
                         oldObjectType, /*TODO owner type*/

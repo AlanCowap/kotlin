@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.test;
@@ -28,6 +28,7 @@ import com.intellij.testFramework.TestDataFile;
 import com.intellij.util.PathUtil;
 import com.intellij.util.containers.ContainerUtil;
 import junit.framework.TestCase;
+import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
 import kotlin.collections.SetsKt;
 import kotlin.jvm.functions.Function1;
@@ -90,6 +91,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.intellij.openapi.application.PathManager.PROPERTY_CONFIG_PATH;
+import static com.intellij.openapi.application.PathManager.PROPERTY_SYSTEM_PATH;
 import static org.jetbrains.kotlin.test.InTextDirectivesUtils.*;
 
 public class KotlinTestUtils {
@@ -427,7 +430,7 @@ public class KotlinTestUtils {
     }
 
     @NotNull
-    public static File tmpDirForReusableLibrary(String name) throws IOException {
+    public static File tmpDirForReusableFolder(String name) throws IOException {
         return normalizeFile(FileUtil.createTempDirectory(new File(System.getProperty("java.io.tmpdir")), name, "", true));
     }
 
@@ -694,9 +697,23 @@ public class KotlinTestUtils {
             @NotNull Disposable disposable,
             @Nullable File javaErrorFile
     ) throws IOException {
+        return compileKotlinWithJava(javaFiles, ktFiles, outDir, disposable, javaErrorFile, null);
+    }
+
+    public static boolean compileKotlinWithJava(
+            @NotNull List<File> javaFiles,
+            @NotNull List<File> ktFiles,
+            @NotNull File outDir,
+            @NotNull Disposable disposable,
+            @Nullable File javaErrorFile,
+            @Nullable Function1<CompilerConfiguration, Unit> updateConfiguration
+    ) throws IOException {
         if (!ktFiles.isEmpty()) {
             KotlinCoreEnvironment environment = createEnvironmentWithFullJdkAndIdeaAnnotations(disposable);
             CompilerTestLanguageVersionSettingsKt.setupLanguageVersionSettingsForMultifileCompilerTests(ktFiles, environment);
+            if (updateConfiguration != null) {
+                updateConfiguration.invoke(environment.getConfiguration());
+            }
             LoadDescriptorUtil.compileKotlinToDirAndGetModule(ktFiles, outDir, environment);
         }
         else {
@@ -807,12 +824,15 @@ public class KotlinTestUtils {
                     !isDirectiveDefined(expectedText, "!LANGUAGE: -ReleaseCoroutines");
 
             boolean checkStateMachine = isDirectiveDefined(expectedText, "CHECK_STATE_MACHINE");
+            boolean checkTailCallOptimization = isDirectiveDefined(expectedText, "CHECK_TAIL_CALL_OPTIMIZATION");
 
-            testFiles.add(factory.createFile(supportModule,
-                                             "CoroutineUtil.kt",
-                                             CoroutineTestUtilKt.createTextForHelpers(isReleaseCoroutines, checkStateMachine),
-                                             directives
-            ));
+            testFiles.add(
+                    factory.createFile(
+                            supportModule,
+                            "CoroutineUtil.kt",
+                            CoroutineTestUtilKt.createTextForHelpers(isReleaseCoroutines, checkStateMachine, checkTailCallOptimization),
+                            directives
+                    ));
         }
 
         return testFiles;

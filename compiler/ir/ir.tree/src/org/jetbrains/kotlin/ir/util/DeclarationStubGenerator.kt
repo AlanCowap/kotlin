@@ -93,9 +93,9 @@ class DeclarationStubGenerator(
         val origin = computeOrigin(descriptor)
         return symbolTable.declareProperty(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET, origin, descriptor.original,
-            isDelegated = descriptor.isDelegated
+            isDelegated = @Suppress("DEPRECATION") descriptor.isDelegated
         ) {
-            deserializer?.findDeserializedDeclaration(descriptor)
+            deserializer?.findDeserializedDeclaration(referenced) as? IrProperty
                 ?: IrLazyProperty(UNDEFINED_OFFSET, UNDEFINED_OFFSET, origin, it, this, typeTranslator, bindingContext)
         }
     }
@@ -113,13 +113,7 @@ class DeclarationStubGenerator(
 
         return symbolTable.declareField(UNDEFINED_OFFSET, UNDEFINED_OFFSET, origin, descriptor.original, descriptor.type.toIrType()) {
             deserializer?.findDeserializedDeclaration(referenced) as? IrField
-                ?: IrFieldImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, origin, it, descriptor.type.toIrType())
-        }.apply {
-            initializer = descriptor.compileTimeInitializer?.let {
-                IrExpressionBodyImpl(
-                    constantValueGenerator.generateConstantValueAsExpression(UNDEFINED_OFFSET, UNDEFINED_OFFSET, it)
-                )
-            }
+                ?: IrLazyField(UNDEFINED_OFFSET, UNDEFINED_OFFSET, origin, it, this, typeTranslator)
         }
     }
 

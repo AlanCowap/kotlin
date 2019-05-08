@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.resolve.transformers
@@ -30,7 +30,7 @@ class FirSupertypeResolverTransformer : FirAbstractTreeTransformer() {
     private lateinit var file: FirFile
 
     override fun transformFile(file: FirFile, data: Nothing?): CompositeTransformResult<FirFile> {
-        firSession = file.session
+        firSession = file.fileSession
         this.file = file
         return super.transformFile(file, data)
     }
@@ -156,10 +156,13 @@ class FirSupertypeResolverTransformer : FirAbstractTreeTransformer() {
                     sessionForSupertype
                         .getService(FirSymbolProvider::class)
                         .getClassLikeSymbolByFqName(superTypeClassId)
-                        ?.toFirClassLike() as? FirClass
+                        ?.toFirClassLike()
 
                 // TODO: this if is a temporary hack for built-in types (because we can't load file for them)
-                if (firClassForSupertype == null || firClassForSupertype.superTypeRefs.any { it !is FirResolvedTypeRef }) {
+                if (firClassForSupertype == null ||
+                    (firClassForSupertype is FirClass &&
+                            firClassForSupertype.superTypeRefs.any { it !is FirResolvedTypeRef })
+                ) {
                     val provider = sessionForSupertype.getService(FirProvider::class)
                     val firForSuperClassFile = provider.getFirClassifierContainerFile(superTypeClassId)
 

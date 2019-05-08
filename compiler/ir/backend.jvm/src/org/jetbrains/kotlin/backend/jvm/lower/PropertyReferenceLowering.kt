@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.lower
@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.backend.common.ClassLoweringPass
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclarationWithWrappedDescriptor
+import org.jetbrains.kotlin.backend.common.ir.passTypeArgumentsFrom
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
@@ -56,9 +57,12 @@ internal class PropertyReferenceLowering(val context: JvmBackendContext) : Class
     private val IrMemberAccessExpression.field: IrFieldSymbol?
         get() = (this as? IrPropertyReference)?.field
 
+    private val IrSimpleFunction.signature: String
+        get() = context.state.typeMapper.mapSignatureSkipGeneric(collectRealOverrides().first().descriptor).toString()
+
     private val IrMemberAccessExpression.signature: String
         get() = localPropertyIndices[getter]?.let { "<v#$it>" }
-            ?: getter?.owner?.let { context.state.typeMapper.mapSignatureSkipGeneric(it.descriptor).toString() }
+            ?: (getter?.owner as? IrSimpleFunction)?.signature
             // Plain Java fields do not have a getter, but can be referenced nonetheless. The signature should be
             // the one that a getter would have, if it existed.
             ?: TODO("plain Java field signature")
@@ -106,8 +110,9 @@ internal class PropertyReferenceLowering(val context: JvmBackendContext) : Class
         val parent = expression.propertyContainerChild?.parent
         val context = this@PropertyReferenceLowering.context
         return when {
-            // FileClassLowering creates a class to which all package-level declarations are moved. However, it does not
-            // fix the declarations' parents (yet), which is why we check for both a file class and a package fragment.
+            // FileClassLowering creates a class to which all package-level declarations are moved. However, there
+            // can still be external declarations at the package level, which is why we check for both a file class
+            // and a package fragment.
             parent is IrPackageFragment || (parent is IrClass && parent.origin == IrDeclarationOrigin.FILE_CLASS) ->
                 irCall(context.ir.symbols.getOrCreateKotlinPackage).apply {
                     putValueArgument(0, expression.parentJavaClassReference)
@@ -338,14 +343,20 @@ internal class PropertyReferenceLowering(val context: JvmBackendContext) : Class
 
                 expression.getter?.owner?.let { getter ->
                     buildOverride(superClass.functions.single { it.name.asString() == "get" }) { valueParameters ->
-                        irGet(getter.returnType, null, getter.symbol).apply { setReceiversOn(this, valueParameters) }
+                        irGet(getter.returnType, null, getter.symbol).apply {
+                            copyTypeArgumentsFrom(expression)
+                            setReceiversOn(this, valueParameters)
+                        }
                     }
                 }
 
                 expression.setter?.owner?.let { setter ->
                     buildOverride(superClass.functions.single { it.name.asString() == "set" }) { valueParameters ->
                         val value = irGet(valueParameters.last())
-                        irSet(setter.returnType, null, setter.symbol, value).apply { setReceiversOn(this, valueParameters) }
+                        irSet(setter.returnType, null, setter.symbol, value).apply {
+                            copyTypeArgumentsFrom(expression)
+                            setReceiversOn(this, valueParameters)
+                        }
                     }
                 }
 

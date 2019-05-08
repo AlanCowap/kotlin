@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.coroutines
@@ -34,6 +34,7 @@ import org.jetbrains.org.objectweb.asm.tree.*
 import org.jetbrains.org.objectweb.asm.tree.analysis.Frame
 import org.jetbrains.org.objectweb.asm.tree.analysis.SourceInterpreter
 import org.jetbrains.org.objectweb.asm.tree.analysis.SourceValue
+import kotlin.math.max
 
 private const val COROUTINES_DEBUG_METADATA_VERSION = 1
 
@@ -48,6 +49,7 @@ private const val COROUTINES_METADATA_VERSION_JVM_NAME = "v"
 
 const val SUSPEND_FUNCTION_CONTINUATION_PARAMETER = "\$completion"
 const val SUSPEND_CALL_RESULT_NAME = "\$result"
+const val ILLEGAL_STATE_ERROR_MESSAGE = "call to 'resume' before 'invoke' with coroutine"
 
 class CoroutineTransformerMethodVisitor(
     delegate: MethodVisitor,
@@ -176,7 +178,7 @@ class CoroutineTransformerMethodVisitor(
             insert(last, defaultLabel)
 
             insert(last, withInstructionAdapter {
-                AsmUtil.genThrow(this, "java/lang/IllegalStateException", "call to 'resume' before 'invoke' with coroutine")
+                AsmUtil.genThrow(this, "java/lang/IllegalStateException", ILLEGAL_STATE_ERROR_MESSAGE)
                 areturn(Type.VOID_TYPE)
             })
         }
@@ -627,7 +629,7 @@ class CoroutineTransformerMethodVisitor(
             spilledToVariableMapping.add(spilledToVariable)
 
             varsCountByType.forEach {
-                maxVarsCountByType[it.key] = Math.max(maxVarsCountByType[it.key] ?: 0, it.value)
+                maxVarsCountByType[it.key] = max(maxVarsCountByType[it.key] ?: 0, it.value)
             }
         }
 

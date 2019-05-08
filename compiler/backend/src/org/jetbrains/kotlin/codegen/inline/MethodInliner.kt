@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.inline
@@ -9,16 +9,14 @@ import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.coroutines.continuationAsmType
 import org.jetbrains.kotlin.codegen.coroutines.getOrCreateJvmSuspendFunctionView
 import org.jetbrains.kotlin.codegen.inline.FieldRemapper.Companion.foldName
-import org.jetbrains.kotlin.codegen.inline.coroutines.CoroutineTransformer
+import org.jetbrains.kotlin.codegen.inline.coroutines.*
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicMethods
 import org.jetbrains.kotlin.codegen.optimization.ApiVersionCallsPreprocessingMethodTransformer
 import org.jetbrains.kotlin.codegen.optimization.FixStackWithLabelNormalizationMethodTransformer
-import org.jetbrains.kotlin.codegen.optimization.common.ControlFlowGraph
-import org.jetbrains.kotlin.codegen.optimization.common.InsnSequence
-import org.jetbrains.kotlin.codegen.optimization.common.asSequence
-import org.jetbrains.kotlin.codegen.optimization.common.isMeaningful
+import org.jetbrains.kotlin.codegen.optimization.common.*
 import org.jetbrains.kotlin.codegen.optimization.fixStack.peek
 import org.jetbrains.kotlin.codegen.optimization.fixStack.top
+import org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.ParameterDescriptor
 import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
@@ -40,6 +38,7 @@ import org.jetbrains.org.objectweb.asm.tree.*
 import org.jetbrains.org.objectweb.asm.tree.analysis.*
 import org.jetbrains.org.objectweb.asm.util.Printer
 import java.util.*
+import kotlin.math.max
 
 class MethodInliner(
     private val node: MethodNode,
@@ -67,9 +66,9 @@ class MethodInliner(
         adapter: MethodVisitor,
         remapper: LocalVarRemapper,
         remapReturn: Boolean,
-        labelOwner: LabelOwner
+        returnLabelOwner: ReturnLabelOwner
     ): InlineResult {
-        return doInline(adapter, remapper, remapReturn, labelOwner, 0)
+        return doInline(adapter, remapper, remapReturn, returnLabelOwner, 0)
     }
 
     private fun recordTransformation(info: TransformationInfo) {
@@ -83,11 +82,11 @@ class MethodInliner(
         adapter: MethodVisitor,
         remapper: LocalVarRemapper,
         remapReturn: Boolean,
-        labelOwner: LabelOwner,
+        returnLabelOwner: ReturnLabelOwner,
         finallyDeepShift: Int
     ): InlineResult {
         //analyze body
-        var transformedNode = markPlacesForInlineAndRemoveInlinable(node, labelOwner, finallyDeepShift)
+        var transformedNode = markPlacesForInlineAndRemoveInlinable(node, returnLabelOwner, finallyDeepShift)
         if (inliningContext.isInliningLambda && isDefaultLambdaWithReification(inliningContext.lambdaInfo!!)) {
             //TODO maybe move reification in one place
             inliningContext.root.inlineMethodReifier.reifyInstructions(transformedNode)
@@ -130,7 +129,7 @@ class MethodInliner(
             )
         }
 
-        processReturns(resultNode, labelOwner, remapReturn, end)
+        processReturns(resultNode, returnLabelOwner, remapReturn, end)
         //flush transformed node to output
         resultNode.accept(SkipMaxAndEndVisitor(adapter))
 
@@ -220,6 +219,9 @@ class MethodInliner(
                     val info = invokeCall.functionalArgument
 
                     if (info !is LambdaInfo) {
+                        if (info == NonInlineableArgumentForInlineableSuspendParameter) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, NOINLINE_CALL_MARKER, NOINLINE_CALL_MARKER, "()V", false)
+                        }
                         //noninlinable lambda
                         super.visitMethodInsn(opcode, owner, name, desc, itf)
                         return
@@ -258,7 +260,7 @@ class MethodInliner(
                     val erasedInvokeFunction = ClosureCodegen.getErasedInvokeFunction(actualInvokeDescriptor)
                     val invokeParameters = erasedInvokeFunction.valueParameters
 
-                    val valueParamShift = Math.max(nextLocalIndex, markerShift)//NB: don't inline cause it changes
+                    val valueParamShift = max(nextLocalIndex, markerShift)//NB: don't inline cause it changes
                     putStackValuesIntoLocalsForLambdaOnInvoke(
                         listOf(*info.invokeMethod.argumentTypes), valueParameters, invokeParameters, valueParamShift, this, coroutineDesc
                     )
@@ -366,6 +368,8 @@ class MethodInliner(
                     ReifiedTypeInliner.isNeedClassReificationMarker(MethodInsnNode(opcode, owner, name, desc, false))
                 ) {
                     //we shouldn't process here content of inlining lambda it should be reified at external level except default lambdas
+                } else if (owner == NOINLINE_CALL_MARKER && name == NOINLINE_CALL_MARKER) {
+                    // do not generate multiple markers on single invoke
                 } else {
                     super.visitMethodInsn(opcode, owner, name, desc, itf)
                 }
@@ -386,7 +390,21 @@ class MethodInliner(
 
         node.accept(lambdaInliner)
 
-        return resultNode
+        return surroundInvokesWithSuspendMarkersIfNeeded(resultNode)
+    }
+
+    private fun surroundInvokesWithSuspendMarkersIfNeeded(node: MethodNode): MethodNode {
+        val markers = node.instructions.asSequence().filter { it.isNoinlineCallMarker() }.toList()
+        if (markers.isEmpty()) return node
+        val invokes = markers.map { it.next as MethodInsnNode }
+        node.instructions.removeAll(markers)
+
+        val sourceFrames = MethodTransformer.analyze(inlineCallSiteInfo.ownerClassName, node, SourceInterpreter())
+        val toSurround = invokes.mapNotNull { insn ->
+            findReceiverOfInvoke(sourceFrames[node.instructions.indexOf(insn)], insn)?.let { insn to it }
+        }
+        surroundInvokesWithSuspendMarkers(node, toSurround)
+        return node
     }
 
     private fun isDefaultLambdaWithReification(lambdaInfo: LambdaInfo) =
@@ -470,7 +488,7 @@ class MethodInliner(
             ) {
                 if (isInliningLambda || GENERATE_DEBUG_INFO) {
                     val varSuffix = if (inliningContext.isRoot && !isFakeLocalVariableForInline(name)) INLINE_FUN_VAR_SUFFIX else ""
-                    val varName = if (!varSuffix.isEmpty() && name == "this") name + "_" else name
+                    val varName = if (!varSuffix.isEmpty() && name == AsmUtil.THIS) AsmUtil.INLINE_DECLARATION_SITE_THIS else name
                     super.visitLocalVariable(varName + varSuffix, desc, signature, start, end, getNewIndex(index))
                 }
             }
@@ -485,11 +503,11 @@ class MethodInliner(
     }
 
     private fun markPlacesForInlineAndRemoveInlinable(
-        node: MethodNode, labelOwner: LabelOwner, finallyDeepShift: Int
+        node: MethodNode, returnLabelOwner: ReturnLabelOwner, finallyDeepShift: Int
     ): MethodNode {
         val processingNode = prepareNode(node, finallyDeepShift)
 
-        preprocessNodeBeforeInline(processingNode, labelOwner)
+        preprocessNodeBeforeInline(processingNode, returnLabelOwner)
 
         replaceContinuationAccessesWithFakeContinuationsIfNeeded(processingNode)
 
@@ -769,7 +787,7 @@ class MethodInliner(
         return Type.getArgumentTypes(invoke.desc).let { it.isNotEmpty() && it.last() == languageVersionSettings.continuationAsmType() }
     }
 
-    private fun preprocessNodeBeforeInline(node: MethodNode, labelOwner: LabelOwner) {
+    private fun preprocessNodeBeforeInline(node: MethodNode, returnLabelOwner: ReturnLabelOwner) {
         try {
             FixStackWithLabelNormalizationMethodTransformer().transform("fake", node)
         } catch (e: Throwable) {
@@ -796,7 +814,7 @@ class MethodInliner(
             // TODO extract isLocalReturn / isNonLocalReturn, see processReturns
             val labelName = getMarkedReturnLabelOrNull(insnNode)
             if (labelName != null) {
-                if (!labelOwner.isMyLabel(labelName)) continue
+                if (!returnLabelOwner.isReturnFromMe(labelName)) continue
                 insertBeforeInsn = insnNode.previous
             }
 
@@ -1143,7 +1161,7 @@ class MethodInliner(
         //process local and global returns (local substituted with goto end-label global kept unchanged)
         @JvmStatic
         fun processReturns(
-            node: MethodNode, labelOwner: LabelOwner, remapReturn: Boolean, endLabel: Label?
+            node: MethodNode, returnLabelOwner: ReturnLabelOwner, remapReturn: Boolean, endLabel: Label?
         ): List<PointForExternalFinallyBlocks> {
             if (!remapReturn) {
                 return emptyList()
@@ -1157,7 +1175,7 @@ class MethodInliner(
                     val labelName = getMarkedReturnLabelOrNull(insnNode)
 
                     if (labelName != null) {
-                        isLocalReturn = labelOwner.isMyLabel(labelName)
+                        isLocalReturn = returnLabelOwner.isReturnFromMe(labelName)
                         //remove global return flag
                         if (isLocalReturn) {
                             instructions.remove(insnNode.previous)

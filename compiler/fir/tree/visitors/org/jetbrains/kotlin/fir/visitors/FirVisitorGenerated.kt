@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.fir.visitors
 
@@ -200,10 +200,6 @@ abstract class FirVisitor<out R, in D> {
         return visitCall(annotationCall, data)
     }
 
-    open fun visitArrayGetCall(arrayGetCall: FirArrayGetCall, data: D): R {
-        return visitCall(arrayGetCall, data)
-    }
-
     open fun visitArrayOfCall(arrayOfCall: FirArrayOfCall, data: D): R {
         return visitCall(arrayOfCall, data)
     }
@@ -212,16 +208,16 @@ abstract class FirVisitor<out R, in D> {
         return visitCall(arraySetCall, data)
     }
 
-    open fun visitComponentCall(componentCall: FirComponentCall, data: D): R {
-        return visitCall(componentCall, data)
-    }
-
     open fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): R {
         return visitCall(delegatedConstructorCall, data)
     }
 
     open fun visitFunctionCall(functionCall: FirFunctionCall, data: D): R {
         return visitCall(functionCall, data)
+    }
+
+    open fun visitComponentCall(componentCall: FirComponentCall, data: D): R {
+        return visitFunctionCall(componentCall, data)
     }
 
     open fun visitGetClassCall(getClassCall: FirGetClassCall, data: D): R {
@@ -234,6 +230,10 @@ abstract class FirVisitor<out R, in D> {
 
     open fun visitTypeOperatorCall(typeOperatorCall: FirTypeOperatorCall, data: D): R {
         return visitOperatorCall(typeOperatorCall, data)
+    }
+
+    open fun visitStringConcatenationCall(stringConcatenationCall: FirStringConcatenationCall, data: D): R {
+        return visitCall(stringConcatenationCall, data)
     }
 
     open fun visitClassReferenceExpression(classReferenceExpression: FirClassReferenceExpression, data: D): R {
@@ -264,10 +264,6 @@ abstract class FirVisitor<out R, in D> {
         return visitJump(returnExpression, data)
     }
 
-    open fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression, data: D): R {
-        return visitExpression(namedArgumentExpression, data)
-    }
-
     open fun visitThrowExpression(throwExpression: FirThrowExpression, data: D): R {
         return visitExpression(throwExpression, data)
     }
@@ -278,6 +274,22 @@ abstract class FirVisitor<out R, in D> {
 
     open fun visitWhenExpression(whenExpression: FirWhenExpression, data: D): R {
         return visitExpression(whenExpression, data)
+    }
+
+    open fun visitWhenSubjectExpression(whenSubjectExpression: FirWhenSubjectExpression, data: D): R {
+        return visitExpression(whenSubjectExpression, data)
+    }
+
+    open fun visitWrappedArgumentExpression(wrappedArgumentExpression: FirWrappedArgumentExpression, data: D): R {
+        return visitExpression(wrappedArgumentExpression, data)
+    }
+
+    open fun visitLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression, data: D): R {
+        return visitWrappedArgumentExpression(lambdaArgumentExpression, data)
+    }
+
+    open fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression, data: D): R {
+        return visitWrappedArgumentExpression(namedArgumentExpression, data)
     }
 
     open fun visitLoop(loop: FirLoop, data: D): R {
@@ -348,6 +360,18 @@ abstract class FirVisitor<out R, in D> {
         return visitTypeRef(implicitTypeRef, data)
     }
 
+    open fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef, data: D): R {
+        return visitTypeRef(resolvedTypeRef, data)
+    }
+
+    open fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef, data: D): R {
+        return visitResolvedTypeRef(errorTypeRef, data)
+    }
+
+    open fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef, data: D): R {
+        return visitResolvedTypeRef(resolvedFunctionTypeRef, data)
+    }
+
     open fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability, data: D): R {
         return visitTypeRef(typeRefWithNullability, data)
     }
@@ -358,18 +382,6 @@ abstract class FirVisitor<out R, in D> {
 
     open fun visitFunctionTypeRef(functionTypeRef: FirFunctionTypeRef, data: D): R {
         return visitTypeRefWithNullability(functionTypeRef, data)
-    }
-
-    open fun visitResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef, data: D): R {
-        return visitTypeRefWithNullability(resolvedTypeRef, data)
-    }
-
-    open fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef, data: D): R {
-        return visitResolvedTypeRef(errorTypeRef, data)
-    }
-
-    open fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef, data: D): R {
-        return visitResolvedTypeRef(resolvedFunctionTypeRef, data)
     }
 
     open fun visitUserTypeRef(userTypeRef: FirUserTypeRef, data: D): R {

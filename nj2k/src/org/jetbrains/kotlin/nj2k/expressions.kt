@@ -1,20 +1,17 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k
 
 import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiElement
 import com.intellij.psi.tree.TokenSet
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.j2k.ast.Nullability
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.nj2k.conversions.RecursiveApplicableConversionBase
-import org.jetbrains.kotlin.nj2k.conversions.multiResolveFqName
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -89,6 +86,9 @@ private fun JKKtOperatorToken.unaryExpressionMethodType(
         return symbolProvider.provideByFqName<JKClassSymbol>(KotlinBuiltIns.FQ_NAMES._boolean).asType()
     }
     if (this == KtTokens.MINUS || this == KtTokens.PLUS) {
+        return operandType!!
+    }
+    if (this == KtTokens.EXCL) {
         return operandType!!
     }
     val classSymbol = operandType!!.classSymbol(symbolProvider)
@@ -220,29 +220,25 @@ fun kotlinPostfixExpression(
 fun untilToExpression(
     from: JKExpression,
     to: JKExpression,
-    conversionContext: ConversionContext,
-    psiContext: PsiElement
+    conversionContext: NewJ2kConverterContext
 ): JKExpression =
     rangeExpression(
         from,
         to,
         "until",
-        conversionContext,
-        psiContext
+        conversionContext
     )
 
 fun downToExpression(
     from: JKExpression,
     to: JKExpression,
-    conversionContext: ConversionContext,
-    psiContext: PsiElement
+    conversionContext: NewJ2kConverterContext
 ): JKExpression =
     rangeExpression(
         from,
         to,
         "downTo",
-        conversionContext,
-        psiContext
+        conversionContext
     )
 
 fun List<JKExpression>.toExpressionList() =
@@ -258,14 +254,17 @@ fun rangeExpression(
     from: JKExpression,
     to: JKExpression,
     operatorName: String,
-    conversionContext: ConversionContext,
-    psiContext: PsiElement
-): JKExpression {
-    val returnType = (conversionContext.symbolProvider.provideDirectSymbol(
-        multiResolveFqName(ClassId.fromString("kotlin/ranges/$operatorName"), psiContext).first()
-    ) as JKMethodSymbol).returnType
-    return JKBinaryExpressionImpl(from, to, JKKtOperatorImpl(JKKtWordOperatorToken(operatorName), returnType!!))
-}
+    conversionContext: NewJ2kConverterContext
+): JKExpression =
+    JKBinaryExpressionImpl(
+        from,
+        to,
+        JKKtOperatorImpl(
+            JKKtWordOperatorToken(operatorName),
+            conversionContext.symbolProvider.provideByFqName<JKMethodSymbol>("kotlin.ranges.$operatorName").returnType!!
+        )
+    )
+
 
 fun blockStatement(vararg statements: JKStatement) =
     JKBlockStatementImpl(JKBlockImpl(statements.toList()))
@@ -306,7 +305,7 @@ fun kotlinAssert(assertion: JKExpression, message: JKExpression?, symbolProvider
 
 fun jvmAnnotation(name: String, symbolProvider: JKSymbolProvider) =
     JKAnnotationImpl(
-        symbolProvider.provideByFqName("kotlin.annotation.AnnotationTarget.$name")
+        symbolProvider.provideByFqName("kotlin.jvm.$name")
     )
 
 fun throwAnnotation(throws: List<JKType>, symbolProvider: JKSymbolProvider) =
@@ -328,11 +327,11 @@ fun stringLiteral(content: String, symbolProvider: JKSymbolProvider): JKExpressi
         val newlineSeparator = if (i == lines.size - 1) "" else "\\n"
         JKKtLiteralExpressionImpl("\"$line$newlineSeparator\"", JKLiteralExpression.LiteralType.STRING)
     }.reduce { acc: JKExpression, literalExpression: JKKtLiteralExpression ->
-        kotlinBinaryExpression(acc, literalExpression, JKKtSingleValueOperatorToken(KtTokens.PLUS), symbolProvider)!!
+        kotlinBinaryExpression(acc, literalExpression, JKKtSingleValueOperatorToken(KtTokens.PLUS), symbolProvider)
     }
 }
 
-fun JKVariable.findUsages(scope: JKTreeElement, context: ConversionContext): List<JKFieldAccessExpression> {
+fun JKVariable.findUsages(scope: JKTreeElement, context: NewJ2kConverterContext): List<JKFieldAccessExpression> {
     val symbol = context.symbolProvider.provideUniverseSymbol(this)
     val usages = mutableListOf<JKFieldAccessExpression>()
     val searcher = object : RecursiveApplicableConversionBase() {
@@ -370,7 +369,7 @@ fun JKExpression.bangedBangedExpr(symbolProvider: JKSymbolProvider): JKExpressio
         JKKtOperatorImpl(KtTokens.EXCLEXCL, type(symbolProvider)!!)
     )
 
-fun JKVariable.hasWritableUsages(scope: JKTreeElement, context: ConversionContext): Boolean =
+fun JKVariable.hasWritableUsages(scope: JKTreeElement, context: NewJ2kConverterContext): Boolean =
     findUsages(scope, context).any {
         it.asAssignmentFromTarget() != null
                 || it.isInDecrementOrIncrement()
@@ -518,7 +517,7 @@ fun runExpression(body: JKStatement, symbolProvider: JKSymbolProvider): JKExpres
         emptyList()
     )
     return JKKtCallExpressionImpl(
-        symbolProvider.provideByFqNameMulti("kotlin.run"),
+        symbolProvider.provideByFqName("kotlin.run", true),
         (listOf(lambda)).toArgumentList()
     )
 }
@@ -577,8 +576,7 @@ fun JKExpression.asLiteralTextWithPrefix(): String? =
         else -> null
     }
 
-inline fun JKClass.primaryConstructor(): JKKtPrimaryConstructor? =
-    classBody.declarations.firstIsInstanceOrNull()
+fun JKClass.primaryConstructor(): JKKtPrimaryConstructor? = classBody.declarations.firstIsInstanceOrNull()
 
 fun List<JKExpression>.toArgumentList(): JKArgumentList =
     JKArgumentListImpl(map { JKArgumentImpl(it) })
@@ -598,3 +596,11 @@ fun JKAnnotation.isVarargsArgument(index: Int): Boolean {
 fun JKExpression.asStatement(): JKExpressionStatement =
     JKExpressionStatementImpl(this)
 
+fun <T : JKExpression> T.nullIfStubExpression(): T? =
+    if (this is JKStubExpression) null
+    else this
+
+fun JKExpression.qualified(qualifier: JKExpression?) =
+    if (qualifier != null && qualifier !is JKStubExpression) {
+        JKQualifiedExpressionImpl(qualifier, JKJavaQualifierImpl.DOT, this)
+    } else this

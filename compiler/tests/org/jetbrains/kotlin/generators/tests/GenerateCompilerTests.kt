@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.generators.tests
@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.codegen.flags.AbstractWriteFlagsTest
 import org.jetbrains.kotlin.codegen.ir.*
 import org.jetbrains.kotlin.fir.AbstractFirDiagnosticsSmokeTest
 import org.jetbrains.kotlin.fir.AbstractFirLoadCompiledKotlin
+import org.jetbrains.kotlin.fir.AbstractFir2IrTextTest
 import org.jetbrains.kotlin.fir.AbstractFirResolveTestCase
 import org.jetbrains.kotlin.fir.AbstractFirResolveTestCaseWithStdlib
 import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.ir.AbstractIrJsTextTestCase
 import org.jetbrains.kotlin.ir.AbstractIrSourceRangesTestCase
 import org.jetbrains.kotlin.ir.AbstractIrTextTestCase
 import org.jetbrains.kotlin.jvm.compiler.*
+import org.jetbrains.kotlin.jvm.compiler.ir.AbstractIrCompileJavaAgainstKotlinTest
 import org.jetbrains.kotlin.jvm.compiler.javac.AbstractLoadJavaUsingJavacTest
 import org.jetbrains.kotlin.lexer.kdoc.AbstractKDocLexerTest
 import org.jetbrains.kotlin.lexer.kotlin.AbstractKotlinLexerTest
@@ -220,7 +222,7 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractWriteFlagsTest> {
-            model("writeFlags")
+            model("writeFlags", targetBackend = TargetBackend.JVM)
         }
 
         testClass<AbstractDefaultArgumentsReflectionTest> {
@@ -262,8 +264,8 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractCompileJavaAgainstKotlinTest> {
-            model("compileJavaAgainstKotlin", testClassName = "WithoutJavac", testMethod = "doTestWithoutJavac")
-            model("compileJavaAgainstKotlin", testClassName = "WithJavac", testMethod = "doTestWithJavac")
+            model("compileJavaAgainstKotlin", testClassName = "WithoutJavac", testMethod = "doTestWithoutJavac", targetBackend = TargetBackend.JVM)
+            model("compileJavaAgainstKotlin", testClassName = "WithJavac", testMethod = "doTestWithJavac", targetBackend = TargetBackend.JVM)
         }
 
         testClass<AbstractCompileKotlinAgainstJavaTest> {
@@ -364,12 +366,21 @@ fun main(args: Array<String>) {
             model("codegen/boxAgainstJava", targetBackend = TargetBackend.JVM_IR)
         }
 
+        testClass<AbstractIrCompileJavaAgainstKotlinTest> {
+            model("compileJavaAgainstKotlin", testClassName = "WithoutJavac", testMethod = "doTestWithoutJavac", targetBackend = TargetBackend.JVM_IR)
+            //model("compileJavaAgainstKotlin", testClassName = "WithJavac", testMethod = "doTestWithJavac", targetBackend = TargetBackend.JVM_IR)
+        }
+
         testClass<AbstractIrCompileKotlinAgainstKotlinTest> {
             model("compileKotlinAgainstKotlin", targetBackend = TargetBackend.JVM_IR)
         }
 
         testClass<AbstractIrCheckLocalVariablesTableTest> {
             model("checkLocalVariablesTable", targetBackend = TargetBackend.JVM_IR)
+        }
+
+        testClass<AbstractIrWriteFlagsTest> {
+            model("writeFlags", targetBackend = TargetBackend.JVM_IR)
         }
 
         testClass<AbstractIrLineNumberTest> {
@@ -419,11 +430,17 @@ fun main(args: Array<String>) {
         }
     }
 
-
     testGroup("compiler/fir/resolve/tests", "compiler/testData") {
 
         testClass<AbstractFirDiagnosticsSmokeTest> {
             model("diagnostics/tests")
         }
     }
+
+    testGroup("compiler/fir/fir2ir/tests", "compiler/testData") {
+        testClass<AbstractFir2IrTextTest> {
+            model("ir/irText")
+        }
+    }
+
 }

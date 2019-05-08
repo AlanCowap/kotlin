@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen;
@@ -103,6 +103,8 @@ public class AsmUtil {
     public static final String THIS_IN_DEFAULT_IMPLS = "$this";
 
     public static final String LABELED_THIS_FIELD = THIS + "_";
+
+    public static final String INLINE_DECLARATION_SITE_THIS = "this_";
 
     public static final String LABELED_THIS_PARAMETER = "$" + THIS + "$";
 

@@ -1,2 +1,4 @@
-<T> public final class Beer : R|kotlin/Any| {
+public final class Beer<T> : R|kotlin/Any| {
+    public constructor<T>(): R|test/Beer<T>|
+
 }

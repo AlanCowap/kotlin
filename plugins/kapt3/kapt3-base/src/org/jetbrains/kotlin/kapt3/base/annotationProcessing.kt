@@ -1,10 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.kapt3.base
 
+import com.sun.source.util.Trees
 import com.sun.tools.javac.comp.CompileStates.CompileState
 import com.sun.tools.javac.main.JavaCompiler
 import com.sun.tools.javac.processing.AnnotationProcessingError
@@ -55,7 +56,7 @@ fun KaptContext.doAnnotationProcessing(
         val sourcesStructureListener = cacheManager?.let {
             if (processors.any { it.kind == DeclaredProcType.NON_INCREMENTAL }) return@let null
 
-            val recordTypesListener = MentionedTypesTaskListener(cacheManager.javaCache, processingEnvironment.elementUtils)
+            val recordTypesListener = MentionedTypesTaskListener(cacheManager.javaCache, processingEnvironment.elementUtils, Trees.instance(processingEnvironment))
             compiler.getTaskListeners().add(recordTypesListener)
             recordTypesListener
         }

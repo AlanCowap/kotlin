@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
@@ -108,8 +108,8 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
     }
 
     inner class ThrowableInstanceCreationLowering : IrElementTransformerVoid() {
-        override fun visitCall(expression: IrCall): IrExpression {
-            if (expression.symbol !in throwableConstructors) return super.visitCall(expression)
+        override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+            if (expression.symbol !in throwableConstructors) return super.visitConstructorCall(expression)
 
             expression.transformChildrenVoid(this)
 
@@ -199,7 +199,7 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
             val name = fakeAccessor.name
             val function = JsIrBuilder.buildFunction(name, fakeAccessor.returnType, fakeAccessor.parent).apply {
                 overriddenSymbols += fakeAccessor.overriddenSymbols
-                correspondingProperty = fakeAccessor.correspondingProperty
+                correspondingPropertySymbol = fakeAccessor.correspondingPropertySymbol
                 dispatchReceiverParameter = fakeAccessor.dispatchReceiverParameter?.copyTo(this)
             }
 

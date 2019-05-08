@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.scripting.compiler.plugin
@@ -22,9 +22,10 @@ import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
-import org.jetbrains.kotlin.scripting.shared.definitions.SCRIPT_DEFINITION_MARKERS_PATH
-import org.jetbrains.kotlin.scripting.shared.definitions.discoverScriptTemplatesInClasspath
-import org.jetbrains.kotlin.scripting.shared.definitions.loadScriptTemplatesFromClasspath
+import org.jetbrains.kotlin.scripting.configuration.ScriptingConfigurationKeys
+import org.jetbrains.kotlin.scripting.definitions.SCRIPT_DEFINITION_MARKERS_PATH
+import org.jetbrains.kotlin.scripting.definitions.discoverScriptTemplatesInClasspath
+import org.jetbrains.kotlin.scripting.definitions.loadScriptTemplatesFromClasspath
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestCaseWithTmpdir
@@ -166,7 +167,7 @@ class ScriptingCompilerPluginTest : TestCaseWithTmpdir() {
             addJvmClasspathRoots(runtimeClasspath)
             addJvmClasspathRoots(scriptingClasspath)
             addJvmClasspathRoot(defsOut)
-            addAll(JVMConfigurationKeys.SCRIPT_DEFINITIONS, lazyDefs)
+            addAll(ScriptingConfigurationKeys.SCRIPT_DEFINITIONS, lazyDefs)
         }
 
         val res = KotlinToJVMBytecodeCompiler.compileBunchOfSources(scriptsCompileEnv)

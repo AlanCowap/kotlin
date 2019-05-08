@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.nj2k
 import com.intellij.codeInspection.*
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
@@ -22,8 +23,11 @@ import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.analysis.analyzeInContext
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.core.implicitModality
+import org.jetbrains.kotlin.idea.core.implicitVisibility
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.core.setVisibility
+import org.jetbrains.kotlin.idea.formatter.commitAndUnblockDocument
 import org.jetbrains.kotlin.idea.inspections.*
 import org.jetbrains.kotlin.idea.inspections.branchedTransformations.IfThenToSafeAccessInspection
 import org.jetbrains.kotlin.idea.inspections.conventionNameCalls.ReplaceGetOrSetInspection
@@ -40,13 +44,13 @@ import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.references.readWriteAccess
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.j2k.ConverterSettings
+import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.nj2k.postProcessing.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.calls.callUtil.getCalleeExpressionIfAny
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
@@ -57,6 +61,8 @@ import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.kotlin.utils.mapToIndex
 import java.util.*
+import kotlin.reflect.KClass
+import kotlin.reflect.full.isSubclassOf
 
 interface NewJ2kPostProcessing {
     fun createAction(element: PsiElement, diagnostics: Diagnostics, settings: ConverterSettings?): (() -> Unit)? =
@@ -76,6 +82,29 @@ data class RepeatableProcessingGroup(val processings: List<NewJ2kPostProcessing>
 
 data class OneTimeProcessingGroup(val processings: List<Processing>) : Processing {
     constructor(vararg processings: Processing) : this(processings.toList())
+}
+
+private abstract class CheckableProcessing<E : PsiElement>(private val classTag: KClass<E>) : NewJ2kPostProcessing {
+    protected open fun check(element: E): Boolean =
+        check(element, null)
+
+    protected open fun check(element: E, settings: ConverterSettings?): Boolean =
+        check(element)
+
+    protected abstract fun action(element: E)
+
+    override fun createAction(element: PsiElement, diagnostics: Diagnostics, settings: ConverterSettings?): (() -> Unit)? {
+        if (!element::class.isSubclassOf(classTag)) return null
+        @Suppress("UNCHECKED_CAST")
+        if (!check(element as E, settings)) return null
+        return {
+            if (element.isValid && check(element, settings)) {
+                action(element)
+            }
+        }
+    }
+
+    override val writeActionNeeded: Boolean = true
 }
 
 object NewJ2KPostProcessingRegistrar {
@@ -101,9 +130,10 @@ object NewJ2KPostProcessingRegistrar {
         SingleOneTimeProcessing(registerGeneralInspectionBasedProcessing(RedundantSetterInspection())),
         SingleOneTimeProcessing(ConvertDataClass()),
         RepeatableProcessingGroup(
-            registerGeneralInspectionBasedProcessing(RedundantModalityModifierInspection()),
-            registerGeneralInspectionBasedProcessing(RedundantVisibilityModifierInspection()),
-            registerDiagnosticBasedProcessing(Errors.REDUNDANT_OPEN_IN_INTERFACE) { element: KtDeclaration, diagnostic ->
+            RemoveRedundantVisibilityModifierProcessing(),
+            RemoveRedundantModalityModifierProcessing(),
+            RemoveRedundantConstructorKeywordProcessing(),
+            registerDiagnosticBasedProcessing(Errors.REDUNDANT_OPEN_IN_INTERFACE) { element: KtDeclaration, _ ->
                 element.removeModifier(KtTokens.OPEN_KEYWORD)
             },
             object : NewJ2kPostProcessing {
@@ -165,6 +195,7 @@ object NewJ2KPostProcessingRegistrar {
             registerGeneralInspectionBasedProcessing(RedundantSemicolonInspection()),
             registerIntentionBasedProcessing(RemoveEmptyClassBodyIntention()),
             registerIntentionBasedProcessing(RemoveRedundantCallsOfConversionMethodsIntention()),
+            registerInspectionBasedProcessing(JavaMapForEachInspection()),
 
             registerIntentionBasedProcessing(FoldIfToReturnIntention()) { it.then.isTrivialStatementBody() && it.`else`.isTrivialStatementBody() },
             registerIntentionBasedProcessing(FoldIfToReturnAsymmetricallyIntention()) {
@@ -189,7 +220,7 @@ object NewJ2KPostProcessingRegistrar {
             registerGeneralInspectionBasedProcessing(LiftReturnOrAssignmentInspection()),
             registerGeneralInspectionBasedProcessing(MayBeConstantInspection()),
             registerIntentionBasedProcessing(RemoveEmptyPrimaryConstructorIntention()),
-            registerDiagnosticBasedProcessing(Errors.PLATFORM_CLASS_MAPPED_TO_KOTLIN) { element: KtDotQualifiedExpression, diagnostic ->
+            registerDiagnosticBasedProcessing(Errors.PLATFORM_CLASS_MAPPED_TO_KOTLIN) { element: KtDotQualifiedExpression, _ ->
                 val parent = element.parent as? KtImportDirective ?: return@registerDiagnosticBasedProcessing
                 parent.delete()
             },
@@ -205,15 +236,11 @@ object NewJ2KPostProcessingRegistrar {
                 action.invoke(element.project, null, element.containingFile)
             },
 
-            registerDiagnosticBasedProcessing(Errors.SMARTCAST_IMPOSSIBLE) { element: PsiElement, diagnostic ->
-                val action =
-                    SmartCastImpossibleExclExclFixFactory.createActions(diagnostic).singleOrNull()
-                        ?: return@registerDiagnosticBasedProcessing
-                action.invoke(element.project, null, element.containingFile)
-            },
-
+            registerDiagnosticBasedProcessingWithFixFactory(MissingIteratorExclExclFixFactory, Errors.ITERATOR_ON_NULLABLE),
+            registerDiagnosticBasedProcessingWithFixFactory(SmartCastImpossibleExclExclFixFactory, Errors.SMARTCAST_IMPOSSIBLE),
             registerDiagnosticBasedProcessing(Errors.TYPE_MISMATCH) { element: PsiElement, diagnostic ->
-                val diagnosticWithParameters = diagnostic as? DiagnosticWithParameters2<KtExpression, KotlinType, KotlinType>
+                @Suppress("UNCHECKED_CAST") val diagnosticWithParameters =
+                    diagnostic as? DiagnosticWithParameters2<KtExpression, KotlinType, KotlinType>
                     ?: return@registerDiagnosticBasedProcessing
                 val expectedType = diagnosticWithParameters.a
                 val realType = diagnosticWithParameters.b
@@ -226,19 +253,14 @@ object NewJ2KPostProcessingRegistrar {
                 }
             },
 
-            registerDiagnosticBasedProcessing(Errors.CAST_NEVER_SUCCEEDS) { element: KtSimpleNameExpression, diagnostic ->
-                val action =
-                    ReplacePrimitiveCastWithNumberConversionFix.createActionsForAllProblems(listOf(diagnostic)).singleOrNull()
-                        ?: return@registerDiagnosticBasedProcessing
-                action.invoke(element.project, null, element.containingKtFile)
-            },
-            registerDiagnosticBasedProcessing(Errors.RETURN_TYPE_MISMATCH_ON_OVERRIDE) { element: KtNamedDeclaration, diagnostic ->
-                val action =
-                    ChangeCallableReturnTypeFix.ReturnTypeMismatchOnOverrideFactory
-                        .createActionsForAllProblems(listOf(diagnostic)).singleOrNull()
-                        ?: return@registerDiagnosticBasedProcessing
-                action.invoke(element.project, null, element.containingKtFile)
-            },
+            registerDiagnosticBasedProcessingWithFixFactory(
+                ReplacePrimitiveCastWithNumberConversionFix.Factory,
+                Errors.CAST_NEVER_SUCCEEDS
+            ),
+            registerDiagnosticBasedProcessingWithFixFactory(
+                ChangeCallableReturnTypeFix.ReturnTypeMismatchOnOverrideFactory,
+                Errors.RETURN_TYPE_MISMATCH_ON_OVERRIDE
+            ),
 
             RemoveRedundantTypeQualifierProcessing(),
             RemoveRedundantExpressionQualifierProcessing(),
@@ -257,34 +279,18 @@ object NewJ2KPostProcessingRegistrar {
                 }
             },
 
-            registerDiagnosticBasedProcessing<KtTypeProjection>(Errors.REDUNDANT_PROJECTION) { _, diagnostic ->
-                val fix = RemoveModifierFix.createRemoveProjectionFactory(true).createActions(diagnostic).single() as RemoveModifierFix
-                fix.invoke()
-            },
-
-            registerDiagnosticBasedProcessing<KtModifierListOwner>(Errors.VIRTUAL_MEMBER_HIDDEN) { element, diagnostic ->
-                val action = AddModifierFix
-                    .createFactory(KtTokens.OVERRIDE_KEYWORD)
-                    .createActions(diagnostic)
-                    .singleOrNull() ?: return@registerDiagnosticBasedProcessing
-                action.invoke(element.project, null, element.containingKtFile)
-            },
-
-            registerDiagnosticBasedProcessing<KtModifierListOwner>(Errors.NON_FINAL_MEMBER_IN_FINAL_CLASS) { _, diagnostic ->
-                val fix =
-                    RemoveModifierFix
-                        .createRemoveModifierFromListOwnerFactory(KtTokens.OPEN_KEYWORD)
-                        .createActions(diagnostic).single() as RemoveModifierFix
-                fix.invoke()
-            },
-            registerDiagnosticBasedProcessing<KtModifierListOwner>(Errors.NON_FINAL_MEMBER_IN_OBJECT) { _, diagnostic ->
-                val fix =
-                    RemoveModifierFix
-                        .createRemoveModifierFromListOwnerFactory(KtTokens.OPEN_KEYWORD)
-                        .createActions(diagnostic).single() as RemoveModifierFix
-                fix.invoke()
-            },
-
+            registerDiagnosticBasedProcessingWithFixFactory(
+                RemoveModifierFix.createRemoveProjectionFactory(true),
+                Errors.REDUNDANT_PROJECTION
+            ),
+            registerDiagnosticBasedProcessingWithFixFactory(
+                AddModifierFix.createFactory(KtTokens.OVERRIDE_KEYWORD),
+                Errors.VIRTUAL_MEMBER_HIDDEN
+            ),
+            registerDiagnosticBasedProcessingWithFixFactory(
+                RemoveModifierFix.createRemoveModifierFromListOwnerFactory(KtTokens.OPEN_KEYWORD),
+                Errors.NON_FINAL_MEMBER_IN_FINAL_CLASS, Errors.NON_FINAL_MEMBER_IN_OBJECT
+            ),
             registerDiagnosticBasedProcessingFactory(
                 Errors.VAL_REASSIGNMENT, Errors.CAPTURED_VAL_INITIALIZATION, Errors.CAPTURED_MEMBER_VAL_INITIALIZATION
             ) { element: KtSimpleNameExpression, _: Diagnostic ->
@@ -308,7 +314,8 @@ object NewJ2KPostProcessingRegistrar {
                 if (context.diagnostics.forElement(element).any { it.factory == Errors.UNNECESSARY_NOT_NULL_ASSERTION }) {
                     exclExclExpr.replace(baseExpression)
                 }
-            }
+            },
+            RemoveForExpressionLoopParameterTypeProcessing()
         )
     )
 
@@ -342,7 +349,7 @@ object NewJ2KPostProcessingRegistrar {
     }
 
 
-    private inline fun <TInspection : AbstractKotlinInspection> registerGeneralInspectionBasedProcessing(
+    private fun <TInspection : AbstractKotlinInspection> registerGeneralInspectionBasedProcessing(
         inspection: TInspection,
         acceptInformationLevel: Boolean = false
     ) = (object : NewJ2kPostProcessing {
@@ -367,8 +374,8 @@ object NewJ2KPostProcessingRegistrar {
 
                     @Suppress("NOT_YET_SUPPORTED_IN_INLINE")
                     fun applyIntention() {
-                        val action = this.action
-                        when (action) {
+                        @Suppress("UNCHECKED_CAST")
+                        when (val action = this.action) {
                             is SelfTargetingIntention<*> -> applySelfTargetingIntention(action as SelfTargetingIntention<PsiElement>)
                             is QuickFixActionBase<*> -> applyQuickFixActionBase(action)
                         }
@@ -436,6 +443,14 @@ object NewJ2KPostProcessingRegistrar {
                 }
             }
         }
+    }
+
+    private fun registerDiagnosticBasedProcessingWithFixFactory(
+        fixFactory: KotlinIntentionActionsFactory,
+        vararg diagnosticFactory: DiagnosticFactory<*>
+    ): NewJ2kPostProcessing = registerDiagnosticBasedProcessing(*diagnosticFactory) { element: PsiElement, diagnostic: Diagnostic ->
+        fixFactory.createActions(diagnostic).singleOrNull()
+            ?.invoke(element.project, null, element.containingFile)
     }
 
 
@@ -790,6 +805,17 @@ object NewJ2KPostProcessingRegistrar {
         override val writeActionNeeded: Boolean = true
     }
 
+    private class RemoveForExpressionLoopParameterTypeProcessing : CheckableProcessing<KtForExpression>(KtForExpression::class) {
+        override fun check(element: KtForExpression, settings: ConverterSettings?): Boolean =
+            element.loopParameter?.typeReference?.typeElement != null
+                    && settings?.specifyLocalVariableTypeByDefault != true
+
+        override fun action(element: KtForExpression) {
+            element.loopParameter?.typeReference = null
+        }
+
+    }
+
     private class RemoveRedundantExpressionQualifierProcessing : NewJ2kPostProcessing {
         private fun check(qualifiedExpression: KtQualifiedExpression): Boolean {
             val qualifier = (qualifiedExpression.receiverExpression as? KtNameReferenceExpression)
@@ -831,6 +857,64 @@ object NewJ2KPostProcessingRegistrar {
         }
 
         override val writeActionNeeded: Boolean = true
+    }
+
+    private class RemoveRedundantConstructorKeywordProcessing : CheckableProcessing<KtPrimaryConstructor>(KtPrimaryConstructor::class) {
+        override fun check(element: KtPrimaryConstructor): Boolean =
+            element.containingClassOrObject is KtClass
+                    && element.getConstructorKeyword() != null
+                    && element.annotationEntries.isEmpty()
+                    && element.visibilityModifier() == null
+
+
+        override fun action(element: KtPrimaryConstructor) {
+            element.removeRedundantConstructorKeywordAndSpace()
+        }
+    }
+
+    private class RemoveRedundantModalityModifierProcessing : CheckableProcessing<KtDeclaration>(KtDeclaration::class) {
+        override fun check(element: KtDeclaration): Boolean {
+            val modalityModifier = element.modalityModifier() ?: return false
+            val modalityModifierType = modalityModifier.node.elementType
+            val implicitModality = element.implicitModality()
+
+            return modalityModifierType == implicitModality
+        }
+
+        override fun action(element: KtDeclaration) {
+            element.removeModifierSmart(element.modalityModifierType()!!)
+        }
+    }
+
+    //hack until KT-30804 is fixed
+    private fun KtModifierListOwner.removeModifierSmart(modifierToken: KtModifierKeywordToken) {
+        val modifier = modifierList?.getModifier(modifierToken)
+        val comment = modifier?.getPrevSiblingIgnoringWhitespace() as? PsiComment
+        comment?.also {
+            it.parent.addAfter(KtPsiFactory(this).createNewLine(), it)
+        }
+        val newElement = copy() as KtModifierListOwner
+        newElement.removeModifier(modifierToken)
+        replace(newElement)
+        containingFile.commitAndUnblockDocument()
+    }
+
+    private class RemoveRedundantVisibilityModifierProcessing : CheckableProcessing<KtDeclaration>(KtDeclaration::class) {
+        override fun check(element: KtDeclaration): Boolean {
+            val visibilityModifier = element.visibilityModifier() ?: return false
+            val implicitVisibility = element.implicitVisibility()
+            return when {
+                visibilityModifier.node.elementType == implicitVisibility ->
+                    true
+                element.hasModifier(KtTokens.INTERNAL_KEYWORD) && element.containingClassOrObject?.isLocal == true ->
+                    true
+                else -> false
+            }
+        }
+
+        override fun action(element: KtDeclaration) {
+            element.removeModifierSmart(element.visibilityModifierType()!!)
+        }
     }
 
 }

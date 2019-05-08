@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.conversions
@@ -12,7 +12,7 @@ import org.jetbrains.kotlin.nj2k.tree.impl.*
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
-class BuiltinMembersConversion(private val context: ConversionContext) : RecursiveApplicableConversionBase() {
+class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : RecursiveApplicableConversionBase() {
     override fun applyToElement(element: JKTreeElement): JKTreeElement {
         if (element !is JKExpression) return recurse(element)
         return recurse(element.convert() ?: element)
@@ -70,13 +70,13 @@ class BuiltinMembersConversion(private val context: ConversionContext) : Recursi
             when (from) {
                 is JKMethodCallExpression ->
                     JKKtCallExpressionImpl(
-                        context.symbolProvider.provideByFqNameMulti(fqName),
+                        context.symbolProvider.provideByFqName(fqName, true),
                         argumentsProvider(from::arguments.detached()),
                         from::typeArgumentList.detached()
                     ).withNonCodeElementsFrom(from)
                 is JKFieldAccessExpression ->
                     JKKtCallExpressionImpl(
-                        context.symbolProvider.provideByFqNameMulti(fqName),
+                        context.symbolProvider.provideByFqName(fqName, true),
                         JKArgumentListImpl(),
                         JKTypeArgumentListImpl()
                     ).withNonCodeElementsFrom(from)
@@ -91,11 +91,11 @@ class BuiltinMembersConversion(private val context: ConversionContext) : Recursi
             when (from) {
                 is JKMethodCallExpression ->
                     JKFieldAccessExpressionImpl(
-                        context.symbolProvider.provideByFqNameMulti(fqName)
+                        context.symbolProvider.provideByFqName(fqName, true)
                     ).withNonCodeElementsFrom(from)
                 is JKFieldAccessExpression ->
                     JKFieldAccessExpressionImpl(
-                        context.symbolProvider.provideByFqNameMulti(fqName)
+                        context.symbolProvider.provideByFqName(fqName, true)
                     ).withNonCodeElementsFrom(from)
                 else -> error("Bad conversion")
             }
@@ -112,7 +112,7 @@ class BuiltinMembersConversion(private val context: ConversionContext) : Recursi
                         arguments.first()::value.detached().parenthesizeIfBinaryExpression(),
                         JKKtQualifierImpl.DOT,
                         JKKtCallExpressionImpl(
-                            context.symbolProvider.provideByFqNameMulti(fqName),
+                            context.symbolProvider.provideByFqName(fqName, true),
                             JKArgumentListImpl(arguments.drop(1)),
                             from::typeArgumentList.detached()
                         )

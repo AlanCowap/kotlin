@@ -1,2 +1,7 @@
-<P> public final class ExtValInClass : R|kotlin/Any| {
+public final class ExtValInClass<P> : R|kotlin/Any| {
+    public final val R|kotlin/Int|.asas: R|P|
+        public get(): R|P|
+
+    public constructor<P>(): R|test/ExtValInClass<P>|
+
 }

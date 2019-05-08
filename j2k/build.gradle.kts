@@ -68,7 +68,7 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-projectTest {
+projectTest(parallel = true) {
     dependsOn(":dist")
     workingDir = rootDir
 }
@@ -101,4 +101,3 @@ fun configureFreeCompilerArg(isEnabled: Boolean, compilerArgument: String) {
         }
     }
 }
-ideaPlugin()

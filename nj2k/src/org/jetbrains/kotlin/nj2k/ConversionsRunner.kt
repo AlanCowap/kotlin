@@ -17,13 +17,11 @@
 package org.jetbrains.kotlin.nj2k
 
 import org.jetbrains.kotlin.nj2k.conversions.*
-import org.jetbrains.kotlin.nj2k.tree.JKTreeElement
 import org.jetbrains.kotlin.nj2k.tree.JKTreeRoot
-import org.jetbrains.kotlin.nj2k.tree.impl.JKTreeRootImpl
 
 object ConversionsRunner {
 
-    private fun createRootConversion(context: ConversionContext) =
+    private fun createRootConversion(context: NewJ2kConverterContext) =
         batchPipe {
             //Java --> Kotlin conversions
             +NonCodeElementsConversion()
@@ -68,13 +66,10 @@ object ConversionsRunner {
             +LiteralConversion()
             +ForConversion(context)
             +LabeledStatementConversion()
-            +ForInConversion(context)
             +TypeParametersNullabilityConversion()
             +ArrayOperationsConversion(context)
-            +BuiltinMembersConversion(context)
             +EqualsOperatorConversion(context)
             +TypeMappingConversion(context)
-            +ImplicitCastsConversion(context)
             +InternalDeclarationConversion(context)
 
             //Kotlin --> Kotlin conversions
@@ -83,11 +78,16 @@ object ConversionsRunner {
             +StaticsToCompanionExtractConversion()
             +InterfaceWithFieldConversion()
             +ClassToObjectPromotionConversion(context)
+            +MethodReferenceToLambdaConversion(context)
+            +BuiltinMembersConversion(context)
+            +ImplicitCastsConversion(context)
+
             +CollectImportsConversion(context)
             +SortClassMembersConversion()
+            +AddElementsInfoConversion(context)
         }
 
-    fun doApply(trees: List<JKTreeRoot>, context: ConversionContext) {
+    fun doApply(trees: List<JKTreeRoot>, context: NewJ2kConverterContext) {
         val conversion = createRootConversion(context)
         conversion.runConversion(trees, context)
     }

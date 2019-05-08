@@ -18,17 +18,14 @@ package org.jetbrains.kotlin.resolve.calls.inference.components
 
 import org.jetbrains.kotlin.resolve.calls.NewCommonSuperTypeCalculator
 import org.jetbrains.kotlin.resolve.calls.inference.components.TypeVariableDirectionCalculator.ResolveDirection
-import org.jetbrains.kotlin.resolve.calls.inference.model.Constraint
-import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintKind
-import org.jetbrains.kotlin.resolve.calls.inference.model.VariableWithConstraints
-import org.jetbrains.kotlin.resolve.calls.inference.model.checkConstraint
+import org.jetbrains.kotlin.resolve.calls.inference.model.*
 import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext
 
 class ResultTypeResolver(
-    val typeApproximator: TypeApproximator,
+    val typeApproximator: AbstractTypeApproximator,
     val trivialConstraintTypeInferenceOracle: TrivialConstraintTypeInferenceOracle
 ) {
     interface Context : TypeSystemInferenceExtensionContext {
@@ -77,7 +74,7 @@ class ResultTypeResolver(
     private fun Context.isSuitableType(resultType: KotlinTypeMarker, variableWithConstraints: VariableWithConstraints): Boolean {
         for (constraint in variableWithConstraints.constraints) {
             if (!isProperType(constraint.type)) continue
-            if (!checkConstraint(constraint.type, constraint.kind, resultType)) return false
+            if (!checkConstraint(this, constraint.type, constraint.kind, resultType)) return false
         }
 
         if (!trivialConstraintTypeInferenceOracle.isSuitableResultedType(resultType)) return false

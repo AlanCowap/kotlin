@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.builders
@@ -203,57 +203,101 @@ fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression?, getterSymbol
     IrGetterCallImpl(
         startOffset, endOffset,
         type,
-        getterSymbol, getterSymbol.descriptor,
-        typeArgumentsCount = 0,
+        getterSymbol as IrSimpleFunctionSymbol,
+        getterSymbol.descriptor,
+        typeArgumentsCount = getterSymbol.owner.typeParameters.size,
         dispatchReceiver = receiver,
         extensionReceiver = null,
         origin = IrStatementOrigin.GET_PROPERTY
     )
 
-fun IrBuilderWithScope.irSet(type: IrType, receiver: IrExpression?, getterSymbol: IrFunctionSymbol, value: IrExpression): IrCall =
+fun IrBuilderWithScope.irSet(type: IrType, receiver: IrExpression?, setterSymbol: IrFunctionSymbol, value: IrExpression): IrCall =
     IrSetterCallImpl(
         startOffset, endOffset,
         type,
-        getterSymbol, getterSymbol.descriptor,
-        typeArgumentsCount = 0,
+        setterSymbol as IrSimpleFunctionSymbol,
+        setterSymbol.descriptor,
+        typeArgumentsCount = setterSymbol.owner.typeParameters.size,
         dispatchReceiver = receiver,
         extensionReceiver = null,
         argument = value,
         origin = IrStatementOrigin.EQ
     )
 
-fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, type: IrType, typeArguments: List<IrType> = emptyList()): IrCall =
-    IrCallImpl(startOffset, endOffset, type, callee, callee.descriptor).apply {
+fun IrBuilderWithScope.irCall(
+    callee: IrFunctionSymbol,
+    type: IrType,
+    typeArguments: List<IrType>
+): IrMemberAccessExpression =
+    irCall(callee, type).apply {
         typeArguments.forEachIndexed { index, irType ->
             this.putTypeArgument(index, irType)
         }
     }
 
-fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol): IrCall =
-    IrCallImpl(startOffset, endOffset, callee.owner.returnType, callee, callee.descriptor)
+fun IrBuilderWithScope.irCallConstructor(callee: IrConstructorSymbol, typeArguments: List<IrType>): IrConstructorCall =
+    IrConstructorCallImpl.fromSymbolOwner(
+        startOffset,
+        endOffset,
+        callee.owner.returnType,
+        callee
+    ).apply {
+        typeArguments.forEachIndexed { index, irType ->
+            this.putTypeArgument(index, irType)
+        }
+    }
+
+fun IrBuilderWithScope.irCall(callee: IrSimpleFunctionSymbol, type: IrType): IrCall =
+    IrCallImpl(startOffset, endOffset, type, callee, callee.descriptor)
+
+fun IrBuilderWithScope.irCall(callee: IrConstructorSymbol, type: IrType): IrConstructorCall =
+    IrConstructorCallImpl.fromSymbolDescriptor(startOffset, endOffset, type, callee)
+
+fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, type: IrType): IrMemberAccessExpression =
+    when (callee) {
+        is IrConstructorSymbol -> irCall(callee, type)
+        is IrSimpleFunctionSymbol -> irCall(callee, type)
+        else -> throw AssertionError("Unexpected callee: $callee")
+    }
+
+fun IrBuilderWithScope.irCall(callee: IrSimpleFunctionSymbol): IrCall =
+    irCall(callee, callee.owner.returnType)
+
+fun IrBuilderWithScope.irCall(callee: IrConstructorSymbol): IrConstructorCall =
+    irCall(callee, callee.owner.returnType)
+
+fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol): IrMemberAccessExpression =
+    irCall(callee, callee.owner.returnType)
 
 fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, descriptor: FunctionDescriptor, type: IrType): IrCall =
-    IrCallImpl(startOffset, endOffset, type, callee, descriptor)
+    IrCallImpl(startOffset, endOffset, type, callee as IrSimpleFunctionSymbol, descriptor)
 
-fun IrBuilderWithScope.irCall(callee: IrFunction): IrCall =
-    irCall(callee.symbol, callee.descriptor, callee.returnType)
+fun IrBuilderWithScope.irCall(callee: IrFunction): IrMemberAccessExpression =
+    irCall(callee.symbol)
 
 fun IrBuilderWithScope.irCall(callee: IrFunction, origin: IrStatementOrigin): IrCall =
-    IrCallImpl(startOffset, endOffset, callee.returnType, callee.symbol, callee.descriptor, origin)
+    IrCallImpl(
+        startOffset, endOffset, callee.returnType,
+        callee.symbol as IrSimpleFunctionSymbol,
+        callee.descriptor, origin
+    )
 
 fun IrBuilderWithScope.irDelegatingConstructorCall(callee: IrConstructor): IrDelegatingConstructorCall =
-    IrDelegatingConstructorCallImpl(startOffset, endOffset, callee.returnType, callee.symbol, callee.descriptor,
-            callee.parentAsClass.typeParameters.size, callee.valueParameters.size)
+    IrDelegatingConstructorCallImpl(
+        startOffset, endOffset, callee.returnType, callee.symbol, callee.descriptor,
+        callee.parentAsClass.typeParameters.size, callee.valueParameters.size
+    )
 
 fun IrBuilderWithScope.irCallOp(
     callee: IrFunctionSymbol,
     type: IrType,
     dispatchReceiver: IrExpression,
-    argument: IrExpression
-): IrCall =
+    argument: IrExpression? = null
+): IrMemberAccessExpression =
     irCall(callee, type).apply {
         this.dispatchReceiver = dispatchReceiver
-        putValueArgument(0, argument)
+        if (argument != null)
+            putValueArgument(0, argument)
     }
 
 fun IrBuilderWithScope.typeOperator(
@@ -278,6 +322,12 @@ fun IrBuilderWithScope.irImplicitCast(argument: IrExpression, type: IrType) =
 
 fun IrBuilderWithScope.irInt(value: Int) =
     IrConstImpl.int(startOffset, endOffset, context.irBuiltIns.intType, value)
+
+fun IrBuilderWithScope.irLong(value: Long) =
+    IrConstImpl.long(startOffset, endOffset, context.irBuiltIns.longType, value)
+
+fun IrBuilderWithScope.irChar(value: Char) =
+    IrConstImpl.char(startOffset, endOffset, context.irBuiltIns.charType, value)
 
 fun IrBuilderWithScope.irString(value: String) =
     IrConstImpl.string(startOffset, endOffset, context.irBuiltIns.stringType, value)

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.nj2k.nullabilityAnalysis
@@ -44,6 +44,11 @@ internal data class PropertyTarget(
 
 internal data class FunctionTarget(
     override val target: KtNamedFunction,
+    override val typeVariable: TypeVariable
+) : DeclarationTypeVariableOwner
+
+internal data class LambdaTarget(
+    override val target: KtFunctionLiteral,
     override val typeVariable: TypeVariable
 ) : DeclarationTypeVariableOwner
 
@@ -106,13 +111,13 @@ internal class GenericBoundType(
 
 internal class LiteralBoundType(val isNull: Boolean) : BoundType {
     override val classReference = LiteralClassReference
-    override val typeParameters = emptyList()
+    override val typeParameters: List<BoundTypeTypeParameter> = emptyList()
     override val forcedNullabilityTo: Nullability? = null
 }
 
 
 internal class TypeVariable(
-    val typeElement: KtTypeElement,
+    val typeElement: KtTypeElement?,
     val classReference: ClassReference,
     val typeParameters: List<TypeVariableTypeParameter>,
     var nullability: Nullability
@@ -130,7 +135,7 @@ internal inline val BoundType.bound
         }
 
 internal inline fun <reified T : BoundType> T.withForcedNullability(nullability: Nullability?): T =
-    if (forcedNullabilityTo == nullability) this
+    if (forcedNullabilityTo == nullability || nullability == null) this
     else when (this) {
         is GenericBoundType ->
             GenericBoundType(
@@ -169,7 +174,7 @@ internal data class BoundTypeTypeParameter(
 
 internal object StarProjectionBoundType : BoundType {
     override val classReference = UnknownClassReference("*")//TODO
-    override val typeParameters = emptyList()
+    override val typeParameters: List<BoundTypeTypeParameter> = emptyList()
     override val forcedNullabilityTo = null
 }
 
